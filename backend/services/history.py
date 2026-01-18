@@ -98,8 +98,8 @@ class HistoryService:
         初始状态为 draft（草稿），表示大纲已创建但尚未开始生成图片。
 
         Args:
-            topic: 绘本主题/标题
-            outline: 大纲内容，包含 pages 数组等信息
+            topic: 用户输入的主题（仅作为原始输入保留）
+            outline: 大纲内容，包含 title、pages 数组等信息
             task_id: 关联的生成任务 ID（可选）
 
         Returns:
@@ -112,10 +112,15 @@ class HistoryService:
         record_id = str(uuid.uuid4())
         now = datetime.now().isoformat()
 
+        # 优先使用 AI 从大纲中提取的标题，若为空则使用用户输入作为最后回退
+        ai_title = outline.get("title", "")
+        title = ai_title if ai_title else topic
+
         # 创建完整的记录对象
         record = {
             "id": record_id,
-            "title": topic,
+            "title": title,  # 使用 AI 生成的标题
+            "original_topic": topic,  # 保留原始用户输入
             "created_at": now,
             "updated_at": now,
             "outline": outline,  # 保存完整的大纲数据
@@ -136,7 +141,7 @@ class HistoryService:
         index = self._load_index()
         index["records"].insert(0, {
             "id": record_id,
-            "title": topic,
+            "title": title,  # 使用 AI 生成的标题
             "created_at": now,
             "updated_at": now,
             "status": RecordStatus.DRAFT,  # 索引中也记录状态

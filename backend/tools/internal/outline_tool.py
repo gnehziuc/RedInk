@@ -9,124 +9,6 @@ from langchain_core.tools import BaseTool
 logger = logging.getLogger(__name__)
 
 
-# ============ 结构化上下文模型 ============
-
-class StylePreference(BaseModel):
-    """写作风格偏好"""
-    tone: Optional[str] = Field(
-        default=None,
-        description="语气风格，如：活泼、专业、温馨、幽默、严肃、轻松"
-    )
-    language: Optional[str] = Field(
-        default=None,
-        description="语言特点，如：口语化、书面语、网络流行语、文艺范"
-    )
-    emotion: Optional[str] = Field(
-        default=None,
-        description="情感基调，如：积极向上、治愈系、励志、感性、理性"
-    )
-
-
-class TargetAudience(BaseModel):
-    """目标受众信息"""
-    demographics: Optional[str] = Field(
-        default=None,
-        description="人口统计特征，如：年轻女性、职场新人、宝妈、学生党"
-    )
-    interests: Optional[List[str]] = Field(
-        default=None,
-        description="兴趣标签列表，如：['美妆', '穿搭', '健身']"
-    )
-    pain_points: Optional[List[str]] = Field(
-        default=None,
-        description="痛点需求列表，如：['预算有限', '时间紧张', '选择困难']"
-    )
-
-
-class ContentRequirement(BaseModel):
-    """内容要求"""
-    must_include: Optional[List[str]] = Field(
-        default=None,
-        description="必须包含的元素，如：['价格信息', '使用步骤', '效果对比']"
-    )
-    must_avoid: Optional[List[str]] = Field(
-        default=None,
-        description="必须避免的内容，如：['敏感词', '竞品名称', '夸大宣传']"
-    )
-    word_count: Optional[str] = Field(
-        default=None,
-        description="篇幅要求，如：'简短精炼'、'详细完整'、'3-5页'"
-    )
-    format_hints: Optional[List[str]] = Field(
-        default=None,
-        description="格式提示，如：['多用emoji', '分点列举', '图文结合']"
-    )
-
-
-class ReferenceInfo(BaseModel):
-    """参考信息"""
-    similar_content: Optional[str] = Field(
-        default=None,
-        description="相似内容参考，如：'参考某某博主的风格'"
-    )
-    keywords: Optional[List[str]] = Field(
-        default=None,
-        description="关键词列表，用于 SEO 或搜索优化"
-    )
-    hashtags: Optional[List[str]] = Field(
-        default=None,
-        description="推荐使用的话题标签"
-    )
-
-
-class ContentMetadata(BaseModel):
-    """内容元数据"""
-    content_type: Optional[str] = Field(
-        default="小红书图文",
-        description="内容类型，如：教程、测评、分享、种草、避雷、攻略"
-    )
-    purpose: Optional[str] = Field(
-        default=None,
-        description="创作目的，如：品牌推广、知识分享、经验总结、产品种草"
-    )
-    urgency: Optional[str] = Field(
-        default=None,
-        description="时效性要求，如：热点追踪、季节性内容、长期常青"
-    )
-    platform: Optional[str] = Field(
-        default="小红书",
-        description="目标平台，如：小红书、抖音、微信公众号"
-    )
-
-
-class CreationContext(BaseModel):
-    """创作上下文 - 完整的结构化上下文信息"""
-    style: Optional[StylePreference] = Field(
-        default=None,
-        description="写作风格偏好"
-    )
-    audience: Optional[TargetAudience] = Field(
-        default=None,
-        description="目标受众信息"
-    )
-    requirements: Optional[ContentRequirement] = Field(
-        default=None,
-        description="内容要求和约束"
-    )
-    references: Optional[ReferenceInfo] = Field(
-        default=None,
-        description="参考信息"
-    )
-    metadata: Optional[ContentMetadata] = Field(
-        default=None,
-        description="内容元数据"
-    )
-    raw_context: Optional[str] = Field(
-        default=None,
-        description="原始上下文文本（兜底，用于无法结构化的信息）"
-    )
-
-
 # ============ 工具输入模型 ============
 
 class GenerateOutlineInput(BaseModel):
@@ -209,7 +91,11 @@ class GenerateOutlineTool(BaseTool):
             return json.dumps({"success": False, "error": str(e)}, ensure_ascii=False)
 
     def _extract_title(self, pages: List[Dict], outline_text: str, fallback: str) -> str:
-        """从大纲中提取标题"""
+        """从大纲中提取标题
+
+        注意：标题应由 AI 从大纲内容中自动提取，不使用用户输入作为回退。
+        如果无法提取到标题，返回空字符串，让前端显示为空或使用默认占位符。
+        """
         # 尝试从封面页提取标题
         for page in pages:
             if page.get("type") == "cover":
@@ -233,8 +119,19 @@ class GenerateOutlineTool(BaseTool):
         if title_match:
             return title_match.group(1).strip()
 
-        # 使用主题作为回退
-        return fallback[:50] if len(fallback) > 50 else fallback
+        # 尝试从第一页内容提取标题（作为最后手段）
+        if pages:
+            first_content = pages[0].get("content", "")
+            lines = first_content.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and not line.startswith('[') and not line.startswith('#'):
+                    clean_line = re.sub(r'\[.*?\]', '', line).strip()
+                    if clean_line and len(clean_line) > 2:
+                        return clean_line[:50]
+
+        # 不使用用户输入作为回退，返回空字符串
+        return ""
 
     def _extract_summary(self, pages: List[Dict], outline_text: str) -> str:
         """从大纲中提取摘要"""
@@ -297,8 +194,6 @@ class GenerateOutlineTool(BaseTool):
             return topic
         return f"{topic}\n\n{context}"
 
-
-    
     async def _arun(
         self,
         topic: str,

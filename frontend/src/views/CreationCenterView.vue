@@ -715,7 +715,8 @@ function handleToolResult(data: any) {
     if (result?.pages && Array.isArray(result.pages)) {
       console.log('应用大纲结果:', result)
       generatedPages.value = result.pages
-      generatedTitle.value = result.title || topic.value
+      // 标题由 AI 从大纲中提取，不使用用户输入作为回退
+      generatedTitle.value = result.title || ''
       generatedSummary.value = result.summary || ''
       // 切换到大纲模式
       if (previewMode.value !== 'outline') {
@@ -855,6 +856,9 @@ function handleNewTask() {
   off('agent:response', handleResponse)
   off('agent:tool_call', handleToolCall)
   off('agent:tool_result', handleToolResult)
+
+  // 重置事件监听器标志，允许下次重新注册
+  eventListenersRegistered = false
 
   // 重置状态
   topic.value = ''
