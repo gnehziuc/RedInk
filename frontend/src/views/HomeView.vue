@@ -53,6 +53,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useGeneratorStore } from '../stores/generator'
 import { generateOutline, createHistory } from '../api'
+import { initAgentTask } from '../api/agent'  // P4-1: 导入 Agent API
 
 // 引入组件
 import ShowcaseBackground from '../components/home/ShowcaseBackground.vue'
@@ -78,11 +79,54 @@ function handleImagesChange(images: File[]) {
 }
 
 /**
- * 生成大纲
+ * 使用 Agent 模式生成
+ * P4-1: 修复任务初始化逻辑，先调用后端创建任务再跳转
  */
-async function handleGenerate() {
-  if (!topic.value.trim()) return
+async function handleAgentGenerate() {
+  loading.value = true
+  error.value = ''
 
+  try {
+    // P4-1: 先调用后端初始化任务，获取真正的 task_id
+    const initResult = await initAgentTask({
+      topic: topic.value.trim()
+    })
+
+    if (!initResult.success) {
+      throw new Error(initResult.error || '初始化任务失败')
+    }
+
+    const taskId = initResult.task_id
+
+    // 设置 store 状态
+    store.setTopic(topic.value.trim())
+    store.taskId = taskId
+
+    // 清理输入
+    composerRef.value?.clearPreviews()
+    uploadedImageFiles.value = []
+
+    // 跳转到创作中心，带上已初始化的 taskId
+    router.push({
+      path: '/creation-center',
+      query: {
+        topic: topic.value.trim(),
+        taskId: taskId,
+        initialized: 'true'  // P4-1: 标记任务已初始化
+      }
+    })
+  } catch (err: any) {
+    error.value = err.message || '启动 Agent 任务失败，请重试'
+    console.error('Agent 任务初始化失败:', err)
+  } finally {
+    loading.value = false
+  }
+}
+
+/**
+ * 传统模式生成大纲
+ */
+async function handleTraditionalGenerate() {
   loading.value = true
   error.value = ''
 
@@ -95,12 +139,9 @@ async function handleGenerate() {
     )
 
     if (result.success && result.pages) {
-      // 设置主题和大纲到 store
       store.setTopic(topic.value.trim())
       store.setOutline(result.outline || '', result.pages)
 
-      // 大纲生成成功后，立即创建历史记录
-      // 这样即使用户刷新页面或关闭浏览器，大纲也不会丢失
       try {
         const historyResult = await createHistory(
           topic.value.trim(),
@@ -110,28 +151,23 @@ async function handleGenerate() {
           }
         )
 
-        // 保存历史记录 ID 到 store，后续生成正文和图片时会使用
         if (historyResult.success && historyResult.record_id) {
           store.setRecordId(historyResult.record_id)
         } else {
-          // 创建历史记录失败，记录错误但不阻断流程
           console.error('创建历史记录失败:', historyResult.error || '未知错误')
           store.setRecordId(null)
         }
       } catch (err: any) {
-        // 创建历史记录异常，记录错误但不阻断流程
         console.error('创建历史记录异常:', err.message || err)
         store.setRecordId(null)
       }
 
-      // 保存用户上传的图片到 store
       if (imageFiles.length > 0) {
         store.userImages = imageFiles
       } else {
         store.userImages = []
       }
 
-      // 清理 ComposerInput 的预览
       composerRef.value?.clearPreviews()
       uploadedImageFiles.value = []
 
@@ -143,6 +179,19 @@ async function handleGenerate() {
     error.value = err.message || '网络错误，请重试'
   } finally {
     loading.value = false
+  }
+}
+
+/**
+ * 生成（根据模式选择）
+ */
+async function handleGenerate() {
+  if (!topic.value.trim()) return
+
+  if (store.useAgentMode) {
+    await handleAgentGenerate()
+  } else {
+    await handleTraditionalGenerate()
   }
 }
 </script>

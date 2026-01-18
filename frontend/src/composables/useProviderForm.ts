@@ -27,6 +27,7 @@ export interface Provider {
 export interface ProviderConfig {
   active_provider: string
   providers: Record<string, Provider>
+  generate_images_enabled?: boolean
 }
 
 // 文本服务商表单类型
@@ -85,7 +86,8 @@ export function useProviderForm() {
 
   const imageConfig = ref<ProviderConfig>({
     active_provider: '',
-    providers: {}
+    providers: {},
+    generate_images_enabled: true
   })
 
   // 文本服务商弹窗状态
@@ -144,7 +146,11 @@ export function useProviderForm() {
           active_provider: result.config.text_generation.active_provider,
           providers: result.config.text_generation.providers
         }
-        imageConfig.value = result.config.image_generation
+        imageConfig.value = {
+          active_provider: result.config.image_generation.active_provider,
+          providers: result.config.image_generation.providers,
+          generate_images_enabled: result.config.image_generation.generate_images_enabled ?? true
+        }
       } else {
         alert('加载配置失败: ' + (result.error || '未知错误'))
       }
@@ -331,6 +337,14 @@ export function useProviderForm() {
   }
 
   // ==================== 图片服务商操作 ====================
+
+  /**
+   * 切换图片生成开关
+   */
+  async function toggleImageGeneration(enabled: boolean) {
+    imageConfig.value.generate_images_enabled = enabled
+    await autoSaveConfig()
+  }
 
   /**
    * 激活图片服务商
@@ -536,6 +550,7 @@ export function useProviderForm() {
     updateTextForm,
 
     // 图片服务商方法
+    toggleImageGeneration,
     activateImageProvider,
     openAddImageModal,
     openEditImageModal,

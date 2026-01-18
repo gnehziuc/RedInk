@@ -1,0 +1,770 @@
+enabled: true
+servers:
+  exa:
+    args:
+    - -y
+    - mcp-remote
+    - https://mcp.exa.ai/mcp
+    command: npx
+    enabled: true
+    env: {}
+    tools:
+    - description: Search the web using Exa AI - performs real-time web searches and
+        can scrape content from specific URLs. Supports configurable result counts
+        and returns the content from the most relevant websites.
+      input_schema:
+        $schema: http://json-schema.org/draft-07/schema#
+        additionalProperties: false
+        properties:
+          contextMaxCharacters:
+            description: 'Maximum characters for context string optimized for LLMs
+              (default: 10000)'
+            type: number
+          livecrawl:
+            description: 'Live crawl mode - ''fallback'': use live crawling as backup
+              if cached content unavailable, ''preferred'': prioritize live crawling
+              (default: ''fallback'')'
+            enum:
+            - fallback
+            - preferred
+            type: string
+          numResults:
+            description: 'Number of search results to return (default: 8)'
+            type: number
+          query:
+            description: Websearch query
+            type: string
+          type:
+            description: 'Search type - ''auto'': balanced search (default), ''fast'':
+              quick results, ''deep'': comprehensive search'
+            enum:
+            - auto
+            - fast
+            - deep
+            type: string
+        required:
+        - query
+        type: object
+      name: web_search_exa
+      server: exa
+    - description: 'Search and get relevant context for any programming task. Exa-code
+        has the highest quality and freshest context for libraries, SDKs, and APIs.
+        Use this tool for ANY question or task for related to programming. RULE: when
+        the user''s query contains exa-code or anything related to code, you MUST
+        use this tool.'
+      input_schema:
+        $schema: http://json-schema.org/draft-07/schema#
+        additionalProperties: false
+        properties:
+          query:
+            description: Search query to find relevant context for APIs, Libraries,
+              and SDKs. For example, 'React useState hook examples', 'Python pandas
+              dataframe filtering', 'Express.js middleware', 'Next js partial prerendering
+              configuration'
+            type: string
+          tokensNum:
+            default: 5000
+            description: Number of tokens to return (1000-50000). Default is 5000
+              tokens. Adjust this value based on how much context you need - use lower
+              values for focused queries and higher values for comprehensive documentation.
+            maximum: 50000
+            minimum: 1000
+            type: number
+        required:
+        - query
+        type: object
+      name: get_code_context_exa
+      server: exa
+  hotfind:
+    enabled: true
+    env: {}
+    headers: {}
+    tools:
+    - description: "【推荐优先调用】将自然语言日期表达式解析为标准日期范围\n\n**为什么需要这个工具？**\n用户经常使用\"本周\"、\"\
+        最近7天\"等自然语言表达日期，但 AI 模型自己计算日期\n可能导致不一致的结果。此工具在服务器端使用精确的当前时间计算，确保所有\nAI 模型获得一致的日期范围。\n\
+        \n**推荐使用流程：**\n1. 用户说\"分析AI本周的情感倾向\"\n2. AI 调用 resolve_date_range(\"本周\")\
+        \ → 获取精确日期范围\n3. AI 调用 analyze_sentiment(topic=\"ai\", date_range=上一步返回的date_range)\n\
+        \nArgs:\n    expression: 自然语言日期表达式，支持：\n        - 单日: \"今天\", \"昨天\", \"today\"\
+        , \"yesterday\"\n        - 周: \"本周\", \"上周\", \"this week\", \"last week\"\
+        \n        - 月: \"本月\", \"上月\", \"this month\", \"last month\"\n        - 最近N天:\
+        \ \"最近7天\", \"最近30天\", \"last 7 days\", \"last 30 days\"\n        - 动态: \"\
+        最近5天\", \"last 10 days\"（任意天数）\n\nReturns:\n    JSON格式的日期范围，可直接用于其他工具的 date_range\
+        \ 参数：\n    {\n        \"success\": true,\n        \"expression\": \"本周\",\n\
+        \        \"date_range\": {\n            \"start\": \"2025-11-18\",\n     \
+        \       \"end\": \"2025-11-26\"\n        },\n        \"current_date\": \"\
+        2025-11-26\",\n        \"description\": \"本周（周一到周日，11-18 至 11-26）\"\n    }\n\
+        \nExamples:\n    用户：\"分析AI本周的情感倾向\"\n    AI调用步骤：\n    1. resolve_date_range(\"\
+        本周\")\n       → {\"date_range\": {\"start\": \"2025-11-18\", \"end\": \"2025-11-26\"\
+        }, ...}\n    2. analyze_sentiment(topic=\"ai\", date_range={\"start\": \"\
+        2025-11-18\", \"end\": \"2025-11-26\"})\n\n    用户：\"看看最近7天的特斯拉新闻\"\n    AI调用步骤：\n\
+        \    1. resolve_date_range(\"最近7天\")\n       → {\"date_range\": {\"start\"\
+        : \"2025-11-20\", \"end\": \"2025-11-26\"}, ...}\n    2. search_news(query=\"\
+        特斯拉\", date_range={\"start\": \"2025-11-20\", \"end\": \"2025-11-26\"})"
+      input_schema:
+        properties:
+          expression:
+            type: string
+        required:
+        - expression
+        type: object
+      name: resolve_date_range
+      server: hotfind
+    - description: "获取最新一批爬取的新闻数据，快速了解当前热点\n\nArgs:\n    platforms: 平台ID列表，如 ['zhihu',\
+        \ 'weibo', 'douyin']\n               - 不指定时：使用 config.yaml 中配置的所有平台\n    \
+        \           - 支持的平台来自 config/config.yaml 的 platforms 配置\n               -\
+        \ 每个平台都有对应的name字段（如\"知乎\"、\"微博\"），方便AI识别\n    limit: 返回条数限制，默认50，最大1000\n\
+        \           注意：实际返回数量可能少于请求值，取决于当前可用的新闻总数\n    include_url: 是否包含URL链接，默认False（节省token）\n\
+        \nReturns:\n    JSON格式的新闻列表\n\n**重要：数据展示建议**\n本工具会返回完整的新闻列表（通常50条）给你。但请注意：\n\
+        - **工具返回**：完整的50条数据 ✅\n- **建议展示**：向用户展示全部数据，除非用户明确要求总结\n- **用户期望**：用户可能需要完整数据，请谨慎总结\n\
+        \n**何时可以总结**：\n- 用户明确说\"给我总结一下\"或\"挑重点说\"\n- 数据量超过100条时，可先展示部分并询问是否查看全部\n\n\
+        **注意**：如果用户询问\"为什么只显示了部分\"，说明他们需要完整数据"
+      input_schema:
+        properties:
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+        type: object
+      name: get_latest_news
+      server: hotfind
+    - description: "获取热点话题统计\n\nArgs:\n    top_n: 返回TOP N话题，默认10\n    mode: 时间模式\n\
+        \        - \"daily\": 当日累计数据统计\n        - \"current\": 最新一批数据统计（默认）\n    extract_mode:\
+        \ 提取模式\n        - \"keywords\": 统计预设关注词（基于 config/frequency_words.txt，默认）\n\
+        \        - \"auto_extract\": 自动从新闻标题提取高频词（无需预设，自动发现热点）\n\nReturns:\n    JSON格式的话题频率统计列表\n\
+        \nExamples:\n    - 使用预设关注词: get_trending_topics(mode=\"current\")\n    - 自动提取热点:\
+        \ get_trending_topics(extract_mode=\"auto_extract\", top_n=20)"
+      input_schema:
+        properties:
+          extract_mode:
+            default: keywords
+            type: string
+          mode:
+            default: current
+            type: string
+          top_n:
+            default: 10
+            type: integer
+        type: object
+      name: get_trending_topics
+      server: hotfind
+    - description: "获取最新的 RSS 订阅数据（支持多日查询）\n\nRSS 数据与热榜新闻分开存储，按时间流展示，适合获取特定来源的最新内容。\n\
+        \nArgs:\n    feeds: RSS 源 ID 列表，如 ['hacker-news', '36kr']\n           - 不指定时：返回所有已配置\
+        \ RSS 源的数据\n           - 支持的 RSS 源来自 config/config.yaml 的 rss.feeds 配置\n \
+        \   days: 获取最近 N 天的数据，默认 1（仅今天），最大 30 天\n          - 1: 仅今天（默认）\n        \
+        \  - 7: 最近一周\n          - 30: 最近一个月\n    limit: 返回条数限制，默认50，最大500\n    include_summary:\
+        \ 是否包含文章摘要，默认False（节省token）\n\nReturns:\n    JSON格式的 RSS 条目列表，包含：\n    - rss:\
+        \ RSS 条目数组\n        - title: 文章标题\n        - feed_id: RSS 源 ID\n        -\
+        \ feed_name: RSS 源名称\n        - url: 文章链接\n        - published_at: 发布时间\n\
+        \        - author: 作者（如有）\n        - date: 数据日期\n        - summary: 摘要（仅当\
+        \ include_summary=True）\n    - total: 返回条数\n    - feeds: 请求的 RSS 源列表\n\nExamples:\n\
+        \    - 获取今天所有 RSS: get_latest_rss()\n    - 获取最近一周: get_latest_rss(days=7)\n\
+        \    - 获取指定源最近7天: get_latest_rss(feeds=['hacker-news'], days=7)\n    - 包含摘要:\
+        \ get_latest_rss(include_summary=True, days=7, limit=20)"
+      input_schema:
+        properties:
+          days:
+            default: 1
+            type: integer
+          feeds:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          include_summary:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+        type: object
+      name: get_latest_rss
+      server: hotfind
+    - description: "搜索 RSS 数据\n\n在 RSS 订阅数据中搜索包含指定关键词的文章。\n\nArgs:\n    keyword: 搜索关键词（必需）\n\
+        \    feeds: RSS 源 ID 列表，如 ['hacker-news', '36kr']\n           - 不指定时：搜索所有\
+        \ RSS 源\n    days: 搜索最近 N 天的数据，默认 7 天，最大 30 天\n    limit: 返回条数限制，默认50\n  \
+        \  include_summary: 是否包含文章摘要，默认False\n\nReturns:\n    JSON格式的匹配 RSS 条目列表\n\
+        \nExamples:\n    - search_rss(keyword=\"AI\")\n    - search_rss(keyword=\"\
+        machine learning\", feeds=['hacker-news'], days=14)"
+      input_schema:
+        properties:
+          days:
+            default: 7
+            type: integer
+          feeds:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          include_summary:
+            default: false
+            type: boolean
+          keyword:
+            type: string
+          limit:
+            default: 50
+            type: integer
+        required:
+        - keyword
+        type: object
+      name: search_rss
+      server: hotfind
+    - description: "获取 RSS 源状态信息\n\n查看当前配置的 RSS 源及其数据统计信息。\n\nReturns:\n    JSON格式的\
+        \ RSS 源状态，包含：\n    - available_dates: 有 RSS 数据的日期列表\n    - total_dates: 总日期数\n\
+        \    - today_feeds: 今日各 RSS 源的数据统计\n        - {feed_id}: { name, item_count\
+        \ }\n    - generated_at: 生成时间\n\nExamples:\n    - get_rss_feeds_status() \
+        \ # 查看所有 RSS 源状态"
+      input_schema:
+        properties: {}
+        type: object
+      name: get_rss_feeds_status
+      server: hotfind
+    - description: "获取指定日期的新闻数据，用于历史数据分析和对比\n\nArgs:\n    date_range: 日期范围，支持多种格式:\n\
+        \        - 范围对象: {\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"}\n  \
+        \      - 自然语言: \"今天\", \"昨天\", \"本周\", \"最近7天\"\n        - 单日字符串: \"2025-01-15\"\
+        \n        - 默认值: \"今天\"\n    platforms: 平台ID列表，如 ['zhihu', 'weibo', 'douyin']\n\
+        \               - 不指定时：使用 config.yaml 中配置的所有平台\n               - 支持的平台来自 config/config.yaml\
+        \ 的 platforms 配置\n               - 每个平台都有对应的name字段（如\"知乎\"、\"微博\"），方便AI识别\n\
+        \    limit: 返回条数限制，默认50，最大1000\n           注意：实际返回数量可能少于请求值，取决于指定日期的新闻总数\n\
+        \    include_url: 是否包含URL链接，默认False（节省token）\n\nReturns:\n    JSON格式的新闻列表，包含标题、平台、排名等信息\n\
+        \n**重要：数据展示建议**\n本工具会返回完整的新闻列表（通常50条）给你。但请注意：\n- **工具返回**：完整的50条数据 ✅\n- **建议展示**：向用户展示全部数据，除非用户明确要求总结\n\
+        - **用户期望**：用户可能需要完整数据，请谨慎总结\n\n**何时可以总结**：\n- 用户明确说\"给我总结一下\"或\"挑重点说\"\n-\
+        \ 数据量超过100条时，可先展示部分并询问是否查看全部\n\n**注意**：如果用户询问\"为什么只显示了部分\"，说明他们需要完整数据"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+        type: object
+      name: get_news_by_date
+      server: hotfind
+    - description: "统一话题趋势分析工具 - 整合多种趋势分析模式\n\n**重要：日期范围处理**\n当用户使用\"本周\"、\"最近7天\"\
+        等自然语言时，请先调用 resolve_date_range 工具获取精确日期：\n1. 调用 resolve_date_range(\"本周\"\
+        ) → 获取 {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n2. 将返回的 date_range\
+        \ 传入本工具\n\nArgs:\n    topic: 话题关键词（必需）\n    analysis_type: 分析类型，可选值：\n   \
+        \     - \"trend\": 热度趋势分析（追踪话题的热度变化）\n        - \"lifecycle\": 生命周期分析（从出现到消失的完整周期）\n\
+        \        - \"viral\": 异常热度检测（识别突然爆火的话题）\n        - \"predict\": 话题预测（预测未来可能的热点）\n\
+        \    date_range: 日期范围（trend和lifecycle模式），可选\n                - **格式**: {\"\
+        start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n                - **获取方式**:\
+        \ 调用 resolve_date_range 工具解析自然语言日期\n                - **默认**: 不指定时默认分析最近7天\n\
+        \    granularity: 时间粒度（trend模式），默认\"day\"（仅支持 day，因为底层数据按天聚合）\n    spike_threshold:\
+        \ 热度突增倍数阈值（viral模式），默认3.0\n    time_window: 检测时间窗口小时数（viral模式），默认24\n    lookahead_hours:\
+        \ 预测未来小时数（predict模式），默认6\n    confidence_threshold: 置信度阈值（predict模式），默认0.7\n\
+        \nReturns:\n    JSON格式的趋势分析结果\n\nExamples:\n    用户：\"分析AI本周的趋势\"\n    推荐调用流程：\n\
+        \    1. resolve_date_range(\"本周\") → {\"date_range\": {\"start\": \"2025-11-18\"\
+        , \"end\": \"2025-11-26\"}}\n    2. analyze_topic_trend(topic=\"AI\", date_range={\"\
+        start\": \"2025-11-18\", \"end\": \"2025-11-26\"})\n\n    用户：\"看看特斯拉最近30天的热度\"\
+        \n    推荐调用流程：\n    1. resolve_date_range(\"最近30天\") → {\"date_range\": {\"\
+        start\": \"2025-10-28\", \"end\": \"2025-11-26\"}}\n    2. analyze_topic_trend(topic=\"\
+        特斯拉\", analysis_type=\"lifecycle\", date_range=...)"
+      input_schema:
+        properties:
+          analysis_type:
+            default: trend
+            type: string
+          confidence_threshold:
+            default: 0.7
+            type: number
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          granularity:
+            default: day
+            type: string
+          lookahead_hours:
+            default: 6
+            type: integer
+          spike_threshold:
+            default: 3.0
+            type: number
+          time_window:
+            default: 24
+            type: integer
+          topic:
+            type: string
+        required:
+        - topic
+        type: object
+      name: analyze_topic_trend
+      server: hotfind
+    - description: "统一数据洞察分析工具 - 整合多种数据分析模式\n\nArgs:\n    insight_type: 洞察类型，可选值：\n\
+        \        - \"platform_compare\": 平台对比分析（对比不同平台对话题的关注度）\n        - \"platform_activity\"\
+        : 平台活跃度统计（统计各平台发布频率和活跃时间）\n        - \"keyword_cooccur\": 关键词共现分析（分析关键词同时出现的模式）\n\
+        \    topic: 话题关键词（可选，platform_compare模式适用）\n    date_range: **【对象类型】** 日期范围（可选）\n\
+        \                - **格式**: {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"\
+        }\n                - **示例**: {\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"\
+        }\n                - **重要**: 必须是对象格式，不能传递整数\n    min_frequency: 最小共现频次（keyword_cooccur模式），默认3\n\
+        \    top_n: 返回TOP N结果（keyword_cooccur模式），默认20\n\nReturns:\n    JSON格式的数据洞察分析结果\n\
+        \nExamples:\n    - analyze_data_insights(insight_type=\"platform_compare\"\
+        , topic=\"人工智能\")\n    - analyze_data_insights(insight_type=\"platform_activity\"\
+        , date_range={\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"})\n    -\
+        \ analyze_data_insights(insight_type=\"keyword_cooccur\", min_frequency=5,\
+        \ top_n=15)"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          insight_type:
+            default: platform_compare
+            type: string
+          min_frequency:
+            default: 3
+            type: integer
+          top_n:
+            default: 20
+            type: integer
+          topic:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+        type: object
+      name: analyze_data_insights
+      server: hotfind
+    - description: "分析新闻的情感倾向和热度趋势\n\n**重要：日期范围处理**\n当用户使用\"本周\"、\"最近7天\"等自然语言时，请先调用\
+        \ resolve_date_range 工具获取精确日期：\n1. 调用 resolve_date_range(\"本周\") → 获取 {\"\
+        start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n2. 将返回的 date_range 传入本工具\n\
+        \nArgs:\n    topic: 话题关键词（可选）\n    platforms: 平台ID列表，如 ['zhihu', 'weibo',\
+        \ 'douyin']\n               - 不指定时：使用 config.yaml 中配置的所有平台\n             \
+        \  - 支持的平台来自 config/config.yaml 的 platforms 配置\n               - 每个平台都有对应的name字段（如\"\
+        知乎\"、\"微博\"），方便AI识别\n    date_range: 日期范围（可选）\n                - **格式**: {\"\
+        start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n                - **获取方式**:\
+        \ 调用 resolve_date_range 工具解析自然语言日期\n                - **默认**: 不指定则默认查询今天的数据\n\
+        \    limit: 返回新闻数量，默认50，最大100\n           注意：本工具会对新闻标题进行去重（同一标题在不同平台只保留一次），\n\
+        \           因此实际返回数量可能少于请求的 limit 值\n    sort_by_weight: 是否按热度权重排序，默认True\n\
+        \    include_url: 是否包含URL链接，默认False（节省token）\n\nReturns:\n    JSON格式的分析结果，包含情感分布、热度趋势和相关新闻\n\
+        \nExamples:\n    用户：\"分析AI本周的情感倾向\"\n    推荐调用流程：\n    1. resolve_date_range(\"\
+        本周\") → {\"date_range\": {\"start\": \"2025-11-18\", \"end\": \"2025-11-26\"\
+        }}\n    2. analyze_sentiment(topic=\"AI\", date_range={\"start\": \"2025-11-18\"\
+        , \"end\": \"2025-11-26\"})\n\n    用户：\"分析特斯拉最近7天的新闻情感\"\n    推荐调用流程：\n  \
+        \  1. resolve_date_range(\"最近7天\") → {\"date_range\": {\"start\": \"2025-11-20\"\
+        , \"end\": \"2025-11-26\"}}\n    2. analyze_sentiment(topic=\"特斯拉\", date_range={\"\
+        start\": \"2025-11-20\", \"end\": \"2025-11-26\"})\n\n**重要：数据展示策略**\n- 本工具返回完整的分析结果和新闻列表\n\
+        - **默认展示方式**：展示完整的分析结果（包括所有新闻）\n- 仅在用户明确要求\"总结\"或\"挑重点\"时才进行筛选"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          sort_by_weight:
+            default: true
+            type: boolean
+          topic:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+        type: object
+      name: analyze_sentiment
+      server: hotfind
+    - description: "查找与指定新闻标题相关的其他新闻（支持当天和历史数据）\n\nArgs:\n    reference_title: 参考新闻标题（完整或部分）\n\
+        \    date_range: 日期范围（可选）\n        - 不指定: 只查询今天的数据\n        - \"today\": 今天\n\
+        \        - \"yesterday\": 昨天\n        - \"last_week\": 最近7天\n        - \"\
+        last_month\": 最近30天\n        - {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"\
+        }: 自定义范围\n    threshold: 相似度阈值，0-1之间，默认0.5\n               注意：阈值越高匹配越严格，返回结果越少\n\
+        \    limit: 返回条数限制，默认50\n    include_url: 是否包含URL链接，默认False（节省token）\n\nReturns:\n\
+        \    JSON格式的相关新闻列表，按相似度排序\n\nExamples:\n    - 查找今天的相似新闻: find_related_news(reference_title=\"\
+        特斯拉降价\")\n    - 查找历史相关新闻: find_related_news(reference_title=\"特斯拉降价\", date_range=\"\
+        last_week\")\n    - 自定义日期范围: find_related_news(reference_title=\"AI突破\", date_range={\"\
+        start\": \"2025-01-01\", \"end\": \"2025-01-15\"})\n\n**重要：数据展示策略**\n- 本工具返回完整的相关新闻列表（包括相似度分数）\n\
+        - 仅在用户明确要求\"总结\"时才进行筛选"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          reference_title:
+            type: string
+          threshold:
+            default: 0.5
+            type: number
+        required:
+        - reference_title
+        type: object
+      name: find_related_news
+      server: hotfind
+    - description: "每日/每周摘要生成器 - 自动生成热点摘要报告\n\nArgs:\n    report_type: 报告类型（daily/weekly）\n\
+        \    date_range: **【对象类型】** 自定义日期范围（可选）\n                - **格式**: {\"start\"\
+        : \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n                - **示例**: {\"\
+        start\": \"2025-01-01\", \"end\": \"2025-01-07\"}\n                - **重要**:\
+        \ 必须是对象格式，不能传递整数\n\nReturns:\n    JSON格式的摘要报告，包含Markdown格式内容"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          report_type:
+            default: daily
+            type: string
+        type: object
+      name: generate_summary_report
+      server: hotfind
+    - description: "跨平台新闻聚合 - 对相似新闻进行去重合并\n\n将不同平台报道的同一事件合并为一条聚合新闻，\n显示该新闻在各平台的覆盖情况和综合热度。\n\
+        \n**使用场景：**\n- 想要看到去重后的热点新闻（避免同一事件在不同平台重复展示）\n- 分析某个话题在多个平台的覆盖情况\n- 获取跨平台的综合热度排名\n\
+        \nArgs:\n    date_range: 日期范围（可选）\n        - 不指定: 查询今天\n        - {\"start\"\
+        : \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}: 日期范围\n    platforms: 平台过滤列表，如\
+        \ ['zhihu', 'weibo']\n    similarity_threshold: 相似度阈值，0.3-1.0之间，默认0.7\n  \
+        \                        越高越严格（仅合并非常相似的标题）\n    limit: 返回聚合新闻数量，默认50\n   \
+        \ include_url: 是否包含URL链接，默认False\n\nReturns:\n    JSON格式的聚合结果，包含：\n    - summary:\
+        \ 聚合统计（原始数量、去重后数量、去重率）\n    - aggregated_news: 聚合后的新闻列表\n        - representative_title:\
+        \ 代表标题\n        - platforms: 覆盖的平台列表\n        - platform_count: 覆盖平台数\n  \
+        \      - is_cross_platform: 是否跨平台新闻\n        - best_rank: 最佳排名\n        -\
+        \ aggregate_weight: 综合权重\n        - sources: 各平台来源详情\n    - statistics: 平台覆盖统计\n\
+        \nExamples:\n    - aggregate_news()  # 聚合今天所有平台的新闻\n    - aggregate_news(similarity_threshold=0.8)\
+        \  # 更严格的相似度匹配\n    - aggregate_news(date_range={\"start\": \"2025-01-01\"\
+        , \"end\": \"2025-01-07\"})\n\n**重要：数据展示策略**\n- 本工具返回去重聚合后的新闻列表\n- 跨平台新闻（is_cross_platform=true）通常更具新闻价值\n\
+        - 可优先展示 platform_count > 1 的新闻"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          similarity_threshold:
+            default: 0.7
+            type: number
+        type: object
+      name: aggregate_news
+      server: hotfind
+    - description: "时期对比分析 - 比较两个时间段的新闻数据\n\n对比不同时期的热点话题、平台活跃度、新闻数量等维度。\n\n**使用场景：**\n\
+        - 对比本周和上周的热点变化\n- 分析某个话题在两个时期的热度差异\n- 查看各平台活跃度的周期性变化\n\nArgs:\n    period1:\
+        \ 第一个时间段（基准期）\n        - {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"\
+        }: 日期范围\n        - \"today\", \"yesterday\", \"this_week\", \"last_week\"\
+        , \"this_month\", \"last_month\": 预设值\n    period2: 第二个时间段（对比期，格式同 period1）\n\
+        \    topic: 可选的话题关键词（聚焦特定话题的对比）\n    compare_type: 对比类型\n        - \"overview\"\
+        : 总体概览（默认）- 新闻数量、关键词变化、TOP新闻\n        - \"topic_shift\": 话题变化分析 - 上升话题、下降话题、新出现话题\n\
+        \        - \"platform_activity\": 平台活跃度对比 - 各平台新闻数量变化\n    platforms: 平台过滤列表，如\
+        \ ['zhihu', 'weibo']\n    top_n: 返回 TOP N 结果，默认10\n\nReturns:\n    JSON格式的对比分析结果，包含：\n\
+        \    - periods: 两个时期的日期范围\n    - compare_type: 对比类型\n    - overview/topic_shift/platform_comparison:\
+        \ 具体对比结果（根据类型）\n\nExamples:\n    - compare_periods(period1=\"last_week\",\
+        \ period2=\"this_week\")  # 周环比\n    - compare_periods(period1=\"last_month\"\
+        , period2=\"this_month\", compare_type=\"topic_shift\")\n    - compare_periods(\n\
+        \        period1={\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"},\n \
+        \       period2={\"start\": \"2025-01-08\", \"end\": \"2025-01-14\"},\n  \
+        \      topic=\"人工智能\"\n      )"
+      input_schema:
+        properties:
+          compare_type:
+            default: overview
+            type: string
+          period1:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+          period2:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          top_n:
+            default: 10
+            type: integer
+          topic:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+        required:
+        - period1
+        - period2
+        type: object
+      name: compare_periods
+      server: hotfind
+    - description: "统一搜索接口，支持多种搜索模式，可同时搜索热榜和RSS\n\n**重要：日期范围处理**\n当用户使用\"本周\"、\"最近7天\"\
+        等自然语言时，请先调用 resolve_date_range 工具获取精确日期：\n1. 调用 resolve_date_range(\"本周\"\
+        ) → 获取 {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n2. 将返回的 date_range\
+        \ 传入本工具\n\nArgs:\n    query: 搜索关键词或内容片段\n    search_mode: 搜索模式，可选值：\n    \
+        \    - \"keyword\": 精确关键词匹配（默认，适合搜索特定话题）\n        - \"fuzzy\": 模糊内容匹配（适合搜索内容片段，会过滤相似度低于阈值的结果）\n\
+        \        - \"entity\": 实体名称搜索（适合搜索人物/地点/机构）\n    date_range: 日期范围（可选）\n  \
+        \              - **格式**: {\"start\": \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"\
+        }\n                - **获取方式**: 调用 resolve_date_range 工具解析自然语言日期\n        \
+        \        - **默认**: 不指定时默认查询今天的新闻\n    platforms: 平台ID列表，如 ['zhihu', 'weibo',\
+        \ 'douyin']\n               - 不指定时：使用 config.yaml 中配置的所有平台\n             \
+        \  - 支持的平台来自 config/config.yaml 的 platforms 配置\n               - 每个平台都有对应的name字段（如\"\
+        知乎\"、\"微博\"），方便AI识别\n    limit: 热榜返回条数限制，默认50，最大1000\n           注意：实际返回数量取决于搜索匹配结果（特别是\
+        \ fuzzy 模式下会过滤低相似度结果）\n    sort_by: 排序方式，可选值：\n        - \"relevance\": 按相关度排序（默认）\n\
+        \        - \"weight\": 按新闻权重排序\n        - \"date\": 按日期排序\n    threshold:\
+        \ 相似度阈值（仅fuzzy模式有效），0-1之间，默认0.6\n               注意：阈值越高匹配越严格，返回结果越少\n    include_url:\
+        \ 是否包含URL链接，默认False（节省token）\n    include_rss: 是否同时搜索RSS订阅数据，默认False\n   \
+        \              - 设为True时，会在热榜结果后附加RSS搜索结果\n                 - RSS结果独立展示，不影响热榜排名\n\
+        \    rss_limit: RSS返回条数限制，默认20（仅当include_rss=True时有效）\n\nReturns:\n    JSON格式的搜索结果，包含：\n\
+        \    - results: 热榜新闻列表（按排名/相关度排序）\n    - rss: RSS订阅结果列表（仅当include_rss=True时返回）\n\
+        \    - summary: 搜索统计信息\n\nExamples:\n    用户：\"搜索本周的AI新闻\"\n    推荐调用流程：\n \
+        \   1. resolve_date_range(\"本周\") → {\"date_range\": {\"start\": \"2025-11-18\"\
+        , \"end\": \"2025-11-26\"}}\n    2. search_news(query=\"AI\", date_range={\"\
+        start\": \"2025-11-18\", \"end\": \"2025-11-26\"})\n\n    用户：\"搜索AI相关内容，包括RSS\"\
+        \n    → search_news(query=\"AI\", include_rss=True)\n\n    用户：\"最近7天的特斯拉新闻\"\
+        \n    推荐调用流程：\n    1. resolve_date_range(\"最近7天\") → {\"date_range\": {\"\
+        start\": \"2025-11-20\", \"end\": \"2025-11-26\"}}\n    2. search_news(query=\"\
+        特斯拉\", date_range={\"start\": \"2025-11-20\", \"end\": \"2025-11-26\"})\n\n\
+        \    用户：\"今天的AI新闻\"（默认今天，无需解析）\n    → search_news(query=\"AI\")\n\n**重要：数据展示策略**\n\
+        - 本工具返回完整的搜索结果列表\n- **默认展示方式**：展示全部返回的新闻，无需总结或筛选\n- 仅在用户明确要求\"总结\"或\"挑重点\"\
+        时才进行筛选\n- 当include_rss=True时，热榜和RSS结果分开展示，RSS在热榜之后"
+      input_schema:
+        properties:
+          date_range:
+            anyOf:
+            - additionalProperties:
+                type: string
+              type: object
+            - type: string
+            - type: 'null'
+            default: null
+          include_rss:
+            default: false
+            type: boolean
+          include_url:
+            default: false
+            type: boolean
+          limit:
+            default: 50
+            type: integer
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          query:
+            type: string
+          rss_limit:
+            default: 20
+            type: integer
+          search_mode:
+            default: keyword
+            type: string
+          sort_by:
+            default: relevance
+            type: string
+          threshold:
+            default: 0.6
+            type: number
+        required:
+        - query
+        type: object
+      name: search_news
+      server: hotfind
+    - description: "获取当前系统配置\n\nArgs:\n    section: 配置节，可选值：\n        - \"all\": 所有配置（默认）\n\
+        \        - \"crawler\": 爬虫配置\n        - \"push\": 推送配置\n        - \"keywords\"\
+        : 关键词配置\n        - \"weights\": 权重配置\n\nReturns:\n    JSON格式的配置信息"
+      input_schema:
+        properties:
+          section:
+            default: all
+            type: string
+        type: object
+      name: get_current_config
+      server: hotfind
+    - description: "获取系统运行状态和健康检查信息\n\n返回系统版本、数据统计、缓存状态等信息\n\nReturns:\n    JSON格式的系统状态信息"
+      input_schema:
+        properties: {}
+        type: object
+      name: get_system_status
+      server: hotfind
+    - description: "检查版本更新（同时检查 TrendRadar 和 MCP Server）\n\n比较本地版本与 GitHub 远程版本，判断是否需要更新。\n\
+        远程版本 URL 从 config.yaml 获取：\n- version_check_url: TrendRadar 版本\n- mcp_version_check_url:\
+        \ MCP Server 版本\n\nArgs:\n    proxy_url: 可选的代理URL，用于访问 GitHub（如 http://127.0.0.1:7890）\n\
+        \nReturns:\n    JSON格式的版本检查结果，包含：\n    - success: 是否成功\n    - summary:\n \
+        \       - description: 结果描述\n        - any_update: 是否有任何组件需要更新\n    - data:\n\
+        \        - trendradar: TrendRadar 版本检查结果\n            - name: 组件名称\n     \
+        \       - current_version: 当前本地版本（如 \"5.0.0\"）\n            - remote_version:\
+        \ 远程最新版本\n            - need_update: 是否需要更新\n            - message: 状态描述\n\
+        \        - mcp: MCP Server 版本检查结果\n            - name: 组件名称\n            -\
+        \ current_version: 当前本地版本（如 \"3.1.4\"）\n            - remote_version: 远程最新版本\n\
+        \            - need_update: 是否需要更新\n            - message: 状态描述\n        -\
+        \ any_update: 是否有任何组件需要更新\n\nExamples:\n    - check_version()  # 直接检查两个组件的版本\n\
+        \    - check_version(proxy_url=\"http://127.0.0.1:7890\")  # 使用代理访问 GitHub"
+      input_schema:
+        properties:
+          proxy_url:
+            anyOf:
+            - type: string
+            - type: 'null'
+            default: null
+        type: object
+      name: check_version
+      server: hotfind
+    - description: "手动触发一次爬取任务（可选持久化）\n\nArgs:\n    platforms: 指定平台ID列表，如 ['zhihu',\
+        \ 'weibo', 'douyin']\n               - 不指定时：使用 config.yaml 中配置的所有平台\n    \
+        \           - 支持的平台来自 config/config.yaml 的 platforms 配置\n               -\
+        \ 每个平台都有对应的name字段（如\"知乎\"、\"微博\"），方便AI识别\n               - 注意：失败的平台会在返回结果的\
+        \ failed_platforms 字段中列出\n    save_to_local: 是否保存到本地 output 目录，默认 False\n\
+        \    include_url: 是否包含URL链接，默认False（节省token）\n\nReturns:\n    JSON格式的任务状态信息，包含：\n\
+        \    - platforms: 成功爬取的平台列表\n    - failed_platforms: 失败的平台列表（如有）\n    - total_news:\
+        \ 爬取的新闻总数\n    - data: 新闻数据\n\nExamples:\n    - 临时爬取: trigger_crawl(platforms=['zhihu'])\n\
+        \    - 爬取并保存: trigger_crawl(platforms=['weibo'], save_to_local=True)\n   \
+        \ - 使用默认平台: trigger_crawl()  # 爬取config.yaml中配置的所有平台"
+      input_schema:
+        properties:
+          include_url:
+            default: false
+            type: boolean
+          platforms:
+            anyOf:
+            - items:
+                type: string
+              type: array
+            - type: 'null'
+            default: null
+          save_to_local:
+            default: false
+            type: boolean
+        type: object
+      name: trigger_crawl
+      server: hotfind
+    - description: "从远程存储拉取数据到本地\n\n用于 MCP Server 等场景：爬虫存到远程云存储（如 Cloudflare R2），\n\
+        MCP Server 拉取到本地进行分析查询。\n\nArgs:\n    days: 拉取最近 N 天的数据，默认 7 天\n         \
+        \ - 0: 不拉取\n          - 7: 拉取最近一周的数据\n          - 30: 拉取最近一个月的数据\n\nReturns:\n\
+        \    JSON格式的同步结果，包含：\n    - success: 是否成功\n    - synced_files: 成功同步的文件数量\n\
+        \    - synced_dates: 成功同步的日期列表\n    - skipped_dates: 跳过的日期（本地已存在）\n    - failed_dates:\
+        \ 失败的日期及错误信息\n    - message: 操作结果描述\n\nExamples:\n    - sync_from_remote()\
+        \  # 拉取最近7天\n    - sync_from_remote(days=30)  # 拉取最近30天\n\nNote:\n    需要在\
+        \ config/config.yaml 中配置远程存储（storage.remote）或设置环境变量：\n    - S3_ENDPOINT_URL:\
+        \ 服务端点\n    - S3_BUCKET_NAME: 存储桶名称\n    - S3_ACCESS_KEY_ID: 访问密钥 ID\n   \
+        \ - S3_SECRET_ACCESS_KEY: 访问密钥"
+      input_schema:
+        properties:
+          days:
+            default: 7
+            type: integer
+        type: object
+      name: sync_from_remote
+      server: hotfind
+    - description: "获取存储配置和状态\n\n查看当前存储后端配置、本地和远程存储的状态信息。\n\nReturns:\n    JSON格式的存储状态信息，包含：\n\
+        \    - backend: 当前使用的后端类型（local/remote/auto）\n    - local: 本地存储状态\n      \
+        \  - data_dir: 数据目录\n        - retention_days: 保留天数\n        - total_size:\
+        \ 总大小\n        - date_count: 日期数量\n        - earliest_date: 最早日期\n       \
+        \ - latest_date: 最新日期\n    - remote: 远程存储状态\n        - configured: 是否已配置\n\
+        \        - endpoint_url: 服务端点\n        - bucket_name: 存储桶名称\n        - date_count:\
+        \ 远程日期数量\n    - pull: 拉取配置\n        - enabled: 是否启用自动拉取\n        - days: 自动拉取天数\n\
+        \nExamples:\n    - get_storage_status()  # 查看所有存储状态"
+      input_schema:
+        properties: {}
+        type: object
+      name: get_storage_status
+      server: hotfind
+    - description: "列出本地/远程可用的日期范围\n\n查看本地和远程存储中有哪些日期的数据可用，\n帮助了解数据覆盖范围和同步状态。\n\n\
+        Args:\n    source: 数据来源，可选值：\n        - \"local\": 仅列出本地可用日期\n        - \"\
+        remote\": 仅列出远程可用日期\n        - \"both\": 同时列出两者并进行对比（默认）\n\nReturns:\n   \
+        \ JSON格式的日期列表，包含：\n    - local: 本地日期信息（如果 source 包含 local）\n        - dates:\
+        \ 日期列表（按时间倒序）\n        - count: 日期数量\n        - earliest: 最早日期\n        -\
+        \ latest: 最新日期\n    - remote: 远程日期信息（如果 source 包含 remote）\n        - configured:\
+        \ 是否已配置远程存储\n        - dates: 日期列表\n        - count: 日期数量\n        - earliest:\
+        \ 最早日期\n        - latest: 最新日期\n    - comparison: 对比结果（仅当 source=\"both\"\
+        \ 时）\n        - only_local: 仅本地存在的日期\n        - only_remote: 仅远程存在的日期\n  \
+        \      - both: 两边都存在的日期\n\nExamples:\n    - list_available_dates()  # 查看本地和远程的对比\n\
+        \    - list_available_dates(source=\"local\")  # 仅查看本地\n    - list_available_dates(source=\"\
+        remote\")  # 仅查看远程"
+      input_schema:
+        properties:
+          source:
+            default: both
+            type: string
+        type: object
+      name: list_available_dates
+      server: hotfind
+    type: streamableHttp
+    url: http://192.168.1.66:3333/mcp

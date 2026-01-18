@@ -42,6 +42,9 @@ export interface GeneratorState {
   // 当前阶段：input-输入主题, outline-编辑大纲, generating-生成中, result-查看结果
   stage: 'input' | 'outline' | 'generating' | 'result'
 
+  // 是否使用 Agent 模式（新版智能引擎）
+  useAgentMode: boolean
+
   // 用户输入的主题
   topic: string
 
@@ -101,6 +104,7 @@ function saveState(state: GeneratorState) {
     // 只保存关键数据，不保存 userImages（文件对象无法序列化）
     const toSave = {
       stage: state.stage,                    // 当前阶段
+      useAgentMode: state.useAgentMode,      // Agent 模式开关
       topic: state.topic,                    // 用户输入的主题
       outline: state.outline,                // 大纲数据
       progress: state.progress,              // 生成进度
@@ -123,6 +127,9 @@ export const useGeneratorStore = defineStore('generator', {
     return {
       // 当前阶段
       stage: saved.stage || 'input',
+
+      // Agent 模式（默认开启，使用新版 AI 创作中心）
+      useAgentMode: saved.useAgentMode !== undefined ? saved.useAgentMode : true,
 
       // 用户输入的主题
       topic: saved.topic || '',
@@ -175,6 +182,14 @@ export const useGeneratorStore = defineStore('generator', {
      */
     setTopic(topic: string) {
       this.topic = topic
+    },
+
+    /**
+     * 切换 Agent 模式
+     * @param enabled 是否启用 Agent 模式
+     */
+    setAgentMode(enabled: boolean) {
+      this.useAgentMode = enabled
     },
 
     /**

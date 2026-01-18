@@ -11,6 +11,35 @@
     </div>
 
     <div v-else class="settings-container">
+      <!-- Agent 模式设置 -->
+      <div class="card">
+        <div class="section-header">
+          <div>
+            <h2 class="section-title">创作引擎</h2>
+            <p class="section-desc">选择创作模式</p>
+          </div>
+        </div>
+        <div class="agent-mode-toggle">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              :checked="generatorStore.useAgentMode"
+              @change="toggleAgentMode"
+            />
+            <span class="toggle-switch"></span>
+            <span class="toggle-text">
+              {{ generatorStore.useAgentMode ? '智能 Agent 模式（实验性）' : '传统模式' }}
+            </span>
+          </label>
+          <p class="toggle-desc">
+            {{ generatorStore.useAgentMode
+              ? 'Agent 模式使用 LangChain 智能体自动规划和执行创作流程，支持实时监控思考过程'
+              : '传统模式按步骤生成大纲和图片，流程可控'
+            }}
+          </p>
+        </div>
+      </div>
+
       <!-- 文本生成配置 -->
       <div class="card">
         <div class="section-header">
@@ -54,6 +83,27 @@
           </button>
         </div>
 
+        <!-- 图片生成开关 -->
+        <div class="image-generation-toggle">
+          <label class="toggle-label">
+            <input
+              type="checkbox"
+              :checked="imageConfig.generate_images_enabled"
+              @change="handleImageGenerationToggle"
+            />
+            <span class="toggle-switch"></span>
+            <span class="toggle-text">
+              {{ imageConfig.generate_images_enabled ? '启用图片生成' : '仅生成提示词' }}
+            </span>
+          </label>
+          <p class="toggle-desc">
+            {{ imageConfig.generate_images_enabled
+              ? '调用图片生成 API 生成实际图片'
+              : '仅返回图片提示词，不调用图片生成 API（可用于节省 API 费用或手动生成图片）'
+            }}
+          </p>
+        </div>
+
         <!-- 服务商列表表格 -->
         <ProviderTable
           :providers="imageConfig.providers"
@@ -64,6 +114,9 @@
           @test="testImageProviderInList"
         />
       </div>
+
+      <!-- MCP 工具配置 -->
+      <MCPConfigCard />
     </div>
 
     <!-- 文本服务商弹窗 -->
@@ -100,6 +153,8 @@ import { onMounted } from 'vue'
 import ProviderTable from '../components/settings/ProviderTable.vue'
 import ProviderModal from '../components/settings/ProviderModal.vue'
 import ImageProviderModal from '../components/settings/ImageProviderModal.vue'
+import MCPConfigCard from '../components/settings/MCPConfigCard.vue'
+import { useGeneratorStore } from '../stores/generator'
 import {
   useProviderForm,
   textTypeOptions,
@@ -113,7 +168,16 @@ import {
  * - 管理文本生成服务商配置
  * - 管理图片生成服务商配置
  * - 测试 API 连接
+ * - 切换 Agent 模式
  */
+
+const generatorStore = useGeneratorStore()
+
+// 切换 Agent 模式
+function toggleAgentMode(event: Event) {
+  const target = event.target as HTMLInputElement
+  generatorStore.setAgentMode(target.checked)
+}
 
 // 使用 composable 管理表单状态和逻辑
 const {
@@ -151,6 +215,7 @@ const {
   updateTextForm,
 
   // 图片服务商方法
+  toggleImageGeneration,
   activateImageProvider,
   openAddImageModal,
   openEditImageModal,
@@ -161,6 +226,12 @@ const {
   testImageProviderInList,
   updateImageForm
 } = useProviderForm()
+
+// 切换图片生成开关
+function handleImageGenerationToggle(event: Event) {
+  const target = event.target as HTMLInputElement
+  toggleImageGeneration(target.checked)
+}
 
 onMounted(() => {
   loadConfig()
@@ -210,5 +281,74 @@ onMounted(() => {
   justify-content: center;
   padding: 80px 20px;
   color: #666;
+}
+
+/* Agent 模式切换 */
+.agent-mode-toggle {
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.toggle-label input {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 48px;
+  height: 26px;
+  background: #ddd;
+  border-radius: 13px;
+  transition: background 0.3s;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 20px;
+  height: 20px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.toggle-label input:checked + .toggle-switch {
+  background: var(--primary, #ff2442);
+}
+
+.toggle-label input:checked + .toggle-switch::after {
+  transform: translateX(22px);
+}
+
+.toggle-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: #333;
+}
+
+.toggle-desc {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #666;
+  line-height: 1.5;
+}
+
+/* 图片生成开关 */
+.image-generation-toggle {
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  margin-bottom: 16px;
 }
 </style>

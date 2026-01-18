@@ -64,7 +64,8 @@ def create_config_blueprint():
                         "active_provider": image_config.get('active_provider', ''),
                         "providers": prepare_providers_for_response(
                             image_config.get('providers', {})
-                        )
+                        ),
+                        "generate_images_enabled": image_config.get('generate_images_enabled', True)
                     }
                 }
             })
@@ -193,12 +194,19 @@ def _update_provider_config(config_path: Path, new_data: dict):
         config_path: 配置文件路径
         new_data: 新的配置数据
     """
+    logger.info(f"更新配置文件: {config_path}")
+    logger.debug(f"收到的配置数据: {new_data}")
+
     # 读取现有配置
     existing_config = _read_config(config_path, {'providers': {}})
 
     # 更新 active_provider
     if 'active_provider' in new_data:
         existing_config['active_provider'] = new_data['active_provider']
+
+    # 更新 generate_images_enabled（仅适用于图片配置）
+    if 'generate_images_enabled' in new_data:
+        existing_config['generate_images_enabled'] = new_data['generate_images_enabled']
 
     # 更新 providers
     if 'providers' in new_data:
@@ -221,21 +229,25 @@ def _update_provider_config(config_path: Path, new_data: dict):
 
     # 保存配置
     _write_config(config_path, existing_config)
+    logger.info(f"配置已保存到: {config_path}")
 
 
 def _clear_config_cache():
-    """清除配置缓存"""
+    """清除配置缓存并通知更新"""
     try:
-        from backend.config import Config
-        Config._image_providers_config = None
-    except Exception:
-        pass
+        from backend.config import get_config_manager
+        config_manager = get_config_manager()
+        # 强制重新加载所有配置
+        config_manager.reload_config()
+        logger.info("配置缓存已清除，配置已重新加载")
+    except Exception as e:
+        logger.warning(f"重新加载配置失败: {e}")
 
     try:
         from backend.services.image import reset_image_service
         reset_image_service()
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"重置图片服务失败: {e}")
 
 
 def _load_provider_config(provider_type: str, provider_name: str, config: dict) -> dict:
@@ -426,3 +438,347 @@ def _check_response(result_text: str) -> dict:
             "success": True,
             "message": f"连接成功，但响应内容不符合预期: {result_text[:100]}"
         }
+
+
+# ==================== MCP 配置路由 ====================
+
+def create_mcp_config_blueprint():
+    """创建 MCP 配置路由蓝图"""
+    import asyncio
+    from backend.mcp.client import get_mcp_manager, _sanitize_for_json
+
+    mcp_bp = Blueprint('mcp_config', __name__)
+
+    @mcp_bp.route('/config/mcp', methods=['GET'])
+    def get_mcp_config():
+        """
+        获取 MCP 配置
+
+        返回：
+        - success: 是否成功
+        - config: MCP 配置对象
+          - enabled: 是否启用
+          - servers: 服务器配置
+        """
+        try:
+            manager = get_mcp_manager()
+            config = manager.get_config()
+
+            # 脱敏处理：隐藏环境变量中的敏感信息
+            safe_config = {
+                'enabled': config.get('enabled', False),
+                'servers': {}
+            }
+
+            for server_name, server_config in config.get('servers', {}).items():
+                transport_type = server_config.get('type', 'stdio')
+
+                safe_server = {
+                    'type': transport_type,
+                    'enabled': server_config.get('enabled', True),
+                }
+
+                if transport_type == 'streamableHttp':
+                    # HTTP 类型配置
+                    safe_server['url'] = server_config.get('url', '')
+                    safe_server['headers'] = {}
+
+                    # 对 headers 进行脱敏
+                    for key, value in server_config.get('headers', {}).items():
+                        if any(sensitive in key.upper() for sensitive in ['AUTHORIZATION', 'TOKEN', 'KEY', 'SECRET']):
+                            safe_server['headers'][key] = '***' if value else ''
+                            safe_server['headers'][f'_{key}_set'] = bool(value)
+                        else:
+                            safe_server['headers'][key] = value
+                else:
+                    # stdio 类型配置
+                    safe_server['command'] = server_config.get('command', '')
+                    safe_server['args'] = server_config.get('args', [])
+                    safe_server['env'] = {}
+
+                    # 对环境变量进行脱敏
+                    for key, value in server_config.get('env', {}).items():
+                        if any(sensitive in key.upper() for sensitive in ['KEY', 'TOKEN', 'SECRET', 'PASSWORD']):
+                            safe_server['env'][key] = '***' if value else ''
+                            safe_server['env'][f'_{key}_set'] = bool(value)
+                        else:
+                            safe_server['env'][key] = value
+
+                # 包含已保存的工具列表
+                if 'tools' in server_config:
+                    safe_server['tools'] = server_config['tools']
+
+                safe_config['servers'][server_name] = safe_server
+
+            return jsonify({
+                "success": True,
+                "config": safe_config
+            })
+
+        except Exception as e:
+            logger.error(f"获取 MCP 配置失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"获取配置失败: {str(e)}"
+            }), 500
+
+    @mcp_bp.route('/config/mcp', methods=['POST'])
+    def update_mcp_config():
+        """
+        更新 MCP 配置
+
+        请求体：
+        - enabled: 是否启用 MCP
+        - servers: 服务器配置字典
+
+        返回：
+        - success: 是否成功
+        - message: 结果消息
+        """
+        try:
+            data = request.get_json()
+            manager = get_mcp_manager()
+
+            # 读取现有配置
+            existing_config = manager.get_config()
+
+            # 更新 enabled 状态
+            if 'enabled' in data:
+                existing_config['enabled'] = data['enabled']
+
+            # 更新服务器配置
+            if 'servers' in data:
+                existing_servers = existing_config.get('servers', {})
+                new_servers = data['servers']
+
+                for server_name, new_server_config in new_servers.items():
+                    transport_type = new_server_config.get('type', 'stdio')
+
+                    if server_name in existing_servers:
+                        if transport_type == 'streamableHttp':
+                            # 处理 headers：保留原有的敏感值
+                            existing_headers = existing_servers[server_name].get('headers', {})
+                            new_headers = new_server_config.get('headers', {})
+
+                            for key, value in list(new_headers.items()):
+                                # 如果值是 '***'，保留原有值
+                                if value == '***' and key in existing_headers:
+                                    new_headers[key] = existing_headers[key]
+
+                            # 移除 _xxx_set 标记
+                            new_server_config['headers'] = {k: v for k, v in new_headers.items()
+                                                            if not (k.startswith('_') and k.endswith('_set'))}
+                        else:
+                            # 处理环境变量：保留原有的敏感值
+                            existing_env = existing_servers[server_name].get('env', {})
+                            new_env = new_server_config.get('env', {})
+
+                            for key, value in list(new_env.items()):
+                                # 如果值是 '***'，保留原有值
+                                if value == '***' and key in existing_env:
+                                    new_env[key] = existing_env[key]
+
+                            # 移除 _xxx_set 标记
+                            new_server_config['env'] = {k: v for k, v in new_env.items()
+                                                         if not (k.startswith('_') and k.endswith('_set'))}
+
+                existing_config['servers'] = new_servers
+
+            # 保存配置
+            manager.save_config(existing_config)
+
+            # 重新初始化 MCP 连接
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                loop.run_until_complete(manager.initialize(force=True))
+            finally:
+                loop.close()
+
+            return jsonify({
+                "success": True,
+                "message": "MCP 配置已保存并重新初始化"
+            })
+
+        except Exception as e:
+            logger.error(f"更新 MCP 配置失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"更新配置失败: {str(e)}"
+            }), 500
+
+    @mcp_bp.route('/config/mcp/test', methods=['POST'])
+    def test_mcp_connection():
+        """
+        测试 MCP 服务器连接
+
+        请求体：
+        - server_name: 服务器名称
+        - server_config: 服务器配置（可选，若不提供则从现有配置读取）
+          - command: 启动命令
+          - args: 命令参数
+          - env: 环境变量
+
+        返回：
+        - success: 是否成功
+        - message: 测试结果消息
+        - tools: 发现的工具列表（成功时）
+        """
+        try:
+            data = request.get_json()
+            server_name = data.get('server_name')
+
+            if not server_name:
+                return jsonify({
+                    "success": False,
+                    "error": "缺少 server_name 参数"
+                }), 400
+
+            manager = get_mcp_manager()
+
+            # 获取服务器配置
+            if 'server_config' in data:
+                server_config = data['server_config']
+                transport_type = server_config.get('type', 'stdio')
+
+                # 处理脱敏值
+                existing_config = manager.get_config()
+                if server_name in existing_config.get('servers', {}):
+                    existing_server = existing_config['servers'][server_name]
+
+                    if transport_type == 'streamableHttp':
+                        existing_headers = existing_server.get('headers', {})
+                        new_headers = server_config.get('headers', {})
+
+                        for key, value in list(new_headers.items()):
+                            if value == '***' and key in existing_headers:
+                                new_headers[key] = existing_headers[key]
+
+                        server_config['headers'] = {k: v for k, v in new_headers.items()
+                                                    if not (k.startswith('_') and k.endswith('_set'))}
+                    else:
+                        existing_env = existing_server.get('env', {})
+                        new_env = server_config.get('env', {})
+
+                        for key, value in list(new_env.items()):
+                            if value == '***' and key in existing_env:
+                                new_env[key] = existing_env[key]
+
+                        server_config['env'] = {k: v for k, v in new_env.items()
+                                                if not (k.startswith('_') and k.endswith('_set'))}
+            else:
+                config = manager.get_config()
+                servers = config.get('servers', {})
+
+                if server_name not in servers:
+                    return jsonify({
+                        "success": False,
+                        "error": f"服务器 '{server_name}' 未配置"
+                    }), 400
+
+                server_config = servers[server_name]
+
+            # 测试连接
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            try:
+                result = loop.run_until_complete(
+                    manager.test_server(server_name, server_config)
+                )
+
+                # 如果测试成功，保存工具列表到配置
+                if result.get('success') and result.get('tools'):
+                    config = manager.get_config()
+                    if server_name in config.get('servers', {}):
+                        config['servers'][server_name]['tools'] = result['tools']
+                        manager.save_config(config)
+                        logger.info(f"[{server_name}] 工具列表已保存到配置")
+
+            finally:
+                loop.close()
+
+            return jsonify(result), 200 if result['success'] else 400
+
+        except Exception as e:
+            logger.error(f"测试 MCP 连接失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"测试失败: {str(e)}"
+            }), 500
+
+    @mcp_bp.route('/config/mcp/tools', methods=['GET'])
+    def get_mcp_tools():
+        """
+        获取所有已连接 MCP 服务器的工具列表
+
+        返回：
+        - success: 是否成功
+        - tools: 工具列表
+          - server: 所属服务器
+          - name: 工具名称
+          - description: 工具描述
+        """
+        try:
+            manager = get_mcp_manager()
+            tools = manager.get_all_tools()
+
+            tool_list = [
+                {
+                    'server': t.server_name,
+                    'name': t.name,
+                    'description': t.description,
+                    'input_schema': _sanitize_for_json(t.input_schema)
+                }
+                for t in tools
+            ]
+
+            return jsonify({
+                "success": True,
+                "tools": tool_list
+            })
+
+        except Exception as e:
+            logger.error(f"获取 MCP 工具列表失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"获取工具列表失败: {str(e)}"
+            }), 500
+
+    @mcp_bp.route('/config/mcp/status', methods=['GET'])
+    def get_mcp_status():
+        """
+        获取 MCP 系统状态
+
+        返回：
+        - success: 是否成功
+        - status: 状态信息
+          - initialized: 是否已初始化
+          - servers: 各服务器状态
+        """
+        try:
+            manager = get_mcp_manager()
+
+            servers_status = {}
+            for name, client in manager.get_all_clients().items():
+                servers_status[name] = {
+                    'connected': client.connected,
+                    'healthy': client.is_healthy(),
+                    'tool_count': len(client.tools)
+                }
+
+            return jsonify({
+                "success": True,
+                "status": {
+                    "initialized": manager.is_initialized(),
+                    "servers": servers_status
+                }
+            })
+
+        except Exception as e:
+            logger.error(f"获取 MCP 状态失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"获取状态失败: {str(e)}"
+            }), 500
+
+    return mcp_bp

@@ -5,6 +5,7 @@ import GenerateView from '../views/GenerateView.vue'
 import ResultView from '../views/ResultView.vue'
 import HistoryView from '../views/HistoryView.vue'
 import SettingsView from '../views/SettingsView.vue'
+import CreationCenterView from '../views/CreationCenterView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -12,7 +13,17 @@ const router = createRouter({
     {
       path: '/',
       name: 'home',
+      component: CreationCenterView
+    },
+    {
+      path: '/classic',
+      name: 'classic-home',
       component: HomeView
+    },
+    {
+      path: '/creation-center',
+      name: 'creation-center',
+      component: CreationCenterView
     },
     {
       path: '/outline',

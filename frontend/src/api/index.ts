@@ -734,6 +734,7 @@ export interface Config {
   image_generation: {
     active_provider: string
     providers: Record<string, any>
+    generate_images_enabled?: boolean
   }
 }
 
@@ -793,4 +794,154 @@ export async function generateContent(
     outline
   })
   return response.data
+}
+
+// ==================== MCP 配置 API ====================
+
+export interface MCPServerConfig {
+  type?: 'stdio' | 'streamableHttp'
+  // stdio 类型字段
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  // streamableHttp 类型字段
+  url?: string
+  headers?: Record<string, string>
+  // 通用字段
+  enabled: boolean
+  // 已发现的工具列表（持久化）
+  tools?: MCPTool[]
+}
+
+export interface MCPConfig {
+  enabled: boolean
+  servers: Record<string, MCPServerConfig>
+}
+
+// MCP 工具参数 Schema 定义
+export interface MCPToolPropertySchema {
+  type: string
+  description?: string
+  default?: any
+  enum?: string[]
+}
+
+export interface MCPToolInputSchema {
+  type?: string
+  properties?: Record<string, MCPToolPropertySchema>
+  required?: string[]
+}
+
+export interface MCPTool {
+  server: string
+  name: string
+  description: string
+  input_schema?: MCPToolInputSchema
+}
+
+export interface MCPStatus {
+  initialized: boolean
+  servers: Record<string, {
+    connected: boolean
+    healthy: boolean
+    tool_count: number
+  }>
+}
+
+// 获取 MCP 配置
+export async function getMCPConfig(): Promise<{
+  success: boolean
+  config?: MCPConfig
+  error?: string
+}> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/config/mcp`)
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '获取 MCP 配置失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
+}
+
+// 更新 MCP 配置
+export async function updateMCPConfig(config: Partial<MCPConfig>): Promise<{
+  success: boolean
+  message?: string
+  error?: string
+}> {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/config/mcp`, config)
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '更新 MCP 配置失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
+}
+
+// 测试 MCP 服务器连接
+export async function testMCPConnection(
+  serverName: string,
+  serverConfig?: MCPServerConfig
+): Promise<{
+  success: boolean
+  message?: string
+  tools?: MCPTool[]
+  error?: string
+}> {
+  try {
+    const payload: any = { server_name: serverName }
+    if (serverConfig) {
+      payload.server_config = serverConfig
+    }
+    const response = await axios.post(`${API_BASE_URL}/config/mcp/test`, payload)
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '测试 MCP 连接失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
+}
+
+// 获取 MCP 工具列表
+export async function getMCPTools(): Promise<{
+  success: boolean
+  tools?: MCPTool[]
+  error?: string
+}> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/config/mcp/tools`)
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '获取 MCP 工具列表失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
+}
+
+// 获取 MCP 系统状态
+export async function getMCPStatus(): Promise<{
+  success: boolean
+  status?: MCPStatus
+  error?: string
+}> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/config/mcp/status`)
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '获取 MCP 状态失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
 }

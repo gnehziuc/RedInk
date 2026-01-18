@@ -3,8 +3,9 @@ import sys
 from pathlib import Path
 from flask import Flask, send_from_directory
 from flask_cors import CORS
-from backend.config import Config
+from backend.config import Config, get_config_manager
 from backend.routes import register_routes
+from backend.socket_manager import init_socketio, get_socketio
 
 
 def setup_logging():
@@ -66,6 +67,11 @@ def create_app():
     # 注册所有 API 路由
     register_routes(app)
 
+    # 初始化 WebSocket
+    socketio = init_socketio(app)
+    app.socketio = socketio
+    logger.info("🔌 WebSocket 已初始化")
+
     # 启动时验证配置
     _validate_config_on_startup(logger)
 
@@ -84,12 +90,14 @@ def create_app():
         def index():
             return {
                 "message": "红墨 AI图文生成器 API",
-                "version": "0.1.0",
+                "version": "0.2.0",
+                "features": ["LangChain Agent", "WebSocket", "MCP"],
                 "endpoints": {
                     "health": "/api/health",
                     "outline": "POST /api/outline",
                     "generate": "POST /api/generate",
-                    "images": "GET /api/images/<filename>"
+                    "images": "GET /api/images/<filename>",
+                    "agent": "POST /api/agent/v1/create"
                 }
             }
 
@@ -149,11 +157,26 @@ def _validate_config_on_startup(logger):
 
     logger.info("✅ 配置检查完成")
 
+    # 启动配置文件监控（热更新）
+    config_manager = get_config_manager()
+    config_manager.start_watching(interval=2.0)
+    logger.info("🔄 配置热更新监控已启动")
+
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(
-        host=Config.HOST,
-        port=Config.PORT,
-        debug=Config.DEBUG
-    )
+    # 使用 SocketIO 运行以支持 WebSocket
+    socketio = get_socketio()
+    if socketio:
+        socketio.run(
+            app,
+            host=Config.HOST,
+            port=Config.PORT,
+            debug=Config.DEBUG
+        )
+    else:
+        app.run(
+            host=Config.HOST,
+            port=Config.PORT,
+            debug=Config.DEBUG
+        )

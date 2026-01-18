@@ -13,8 +13,13 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://localhost:12398',
+        target: 'http://127.0.0.1:12398',
         changeOrigin: true
+      },
+      '/socket.io': {
+        target: 'http://127.0.0.1:12398',
+        changeOrigin: true,
+        ws: true  // 启用 WebSocket 代理
       }
     }
   }
