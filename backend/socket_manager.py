@@ -32,8 +32,8 @@ def init_socketio(app) -> SocketIO:
         app,
         cors_allowed_origins="*",
         async_mode='threading',
-        logger=True,
-        engineio_logger=True
+        logger=False,  # 关闭 socketio 日志
+        engineio_logger=False  # 关闭 engineio 日志（避免打印 AI 回复的 token）
     )
 
     # 注册事件处理器
