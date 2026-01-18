@@ -196,6 +196,16 @@ class MCPToolWrapper(BaseTool):
     async def _call_mcp_tool(self, arguments: Dict[str, Any]) -> str:
         """实际调用 MCP 工具"""
         manager = get_mcp_manager()
+
+        # 检查工具是否被禁用
+        config = manager.get_config()
+        server_config = config.get('servers', {}).get(self.mcp_server_name, {})
+        tools_config = server_config.get('tools', [])
+        tool_config = next((t for t in tools_config if isinstance(t, dict) and t.get('name') == self.mcp_tool_name), None)
+
+        if tool_config and not tool_config.get('enabled', True):
+            return f"Error: 工具 '{self.mcp_tool_name}' 已被禁用，无法调用"
+
         client = manager.get_client(self.mcp_server_name)
 
         if not client:
@@ -222,13 +232,18 @@ def create_mcp_tools() -> list[BaseTool]:
     创建所有 MCP 工具的 LangChain 包装器
 
     Returns:
-        list[BaseTool]: LangChain 工具列表
+        list[BaseTool]: LangChain 工具列表（仅包含启用的工具）
     """
     manager = get_mcp_manager()
     mcp_tools = manager.get_all_tools()
 
     langchain_tools = []
     for mcp_tool in mcp_tools:
+        # 跳过禁用的工具
+        if not mcp_tool.enabled:
+            logger.info(f"跳过禁用的 MCP 工具: {mcp_tool.server_name}/{mcp_tool.name}")
+            continue
+
         try:
             wrapper = MCPToolWrapper(mcp_tool)
             langchain_tools.append(wrapper)

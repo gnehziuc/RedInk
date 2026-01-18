@@ -1,17 +1,13 @@
 enabled: true
 servers:
   exa:
-    args:
-    - -y
-    - mcp-remote
-    - https://mcp.exa.ai/mcp
-    command: npx
     enabled: true
-    env: {}
+    headers: {}
     tools:
     - description: Search the web using Exa AI - performs real-time web searches and
         can scrape content from specific URLs. Supports configurable result counts
         and returns the content from the most relevant websites.
+      enabled: true
       input_schema:
         $schema: http://json-schema.org/draft-07/schema#
         additionalProperties: false
@@ -52,6 +48,7 @@ servers:
         Use this tool for ANY question or task for related to programming. RULE: when
         the user''s query contains exa-code or anything related to code, you MUST
         use this tool.'
+      enabled: false
       input_schema:
         $schema: http://json-schema.org/draft-07/schema#
         additionalProperties: false
@@ -75,9 +72,10 @@ servers:
         type: object
       name: get_code_context_exa
       server: exa
+    type: streamableHttp
+    url: https://mcp.exa.ai/mcp
   hotfind:
     enabled: true
-    env: {}
     headers: {}
     tools:
     - description: "【推荐优先调用】将自然语言日期表达式解析为标准日期范围\n\n**为什么需要这个工具？**\n用户经常使用\"本周\"、\"\
@@ -100,6 +98,7 @@ servers:
         \    1. resolve_date_range(\"最近7天\")\n       → {\"date_range\": {\"start\"\
         : \"2025-11-20\", \"end\": \"2025-11-26\"}, ...}\n    2. search_news(query=\"\
         特斯拉\", date_range={\"start\": \"2025-11-20\", \"end\": \"2025-11-26\"})"
+      enabled: false
       input_schema:
         properties:
           expression:
@@ -118,6 +117,7 @@ servers:
         - **工具返回**：完整的50条数据 ✅\n- **建议展示**：向用户展示全部数据，除非用户明确要求总结\n- **用户期望**：用户可能需要完整数据，请谨慎总结\n\
         \n**何时可以总结**：\n- 用户明确说\"给我总结一下\"或\"挑重点说\"\n- 数据量超过100条时，可先展示部分并询问是否查看全部\n\n\
         **注意**：如果用户询问\"为什么只显示了部分\"，说明他们需要完整数据"
+      enabled: true
       input_schema:
         properties:
           include_url:
@@ -142,6 +142,7 @@ servers:
         \        - \"auto_extract\": 自动从新闻标题提取高频词（无需预设，自动发现热点）\n\nReturns:\n    JSON格式的话题频率统计列表\n\
         \nExamples:\n    - 使用预设关注词: get_trending_topics(mode=\"current\")\n    - 自动提取热点:\
         \ get_trending_topics(extract_mode=\"auto_extract\", top_n=20)"
+      enabled: false
       input_schema:
         properties:
           extract_mode:
@@ -169,6 +170,7 @@ servers:
         \    - 获取今天所有 RSS: get_latest_rss()\n    - 获取最近一周: get_latest_rss(days=7)\n\
         \    - 获取指定源最近7天: get_latest_rss(feeds=['hacker-news'], days=7)\n    - 包含摘要:\
         \ get_latest_rss(include_summary=True, days=7, limit=20)"
+      enabled: false
       input_schema:
         properties:
           days:
@@ -196,6 +198,7 @@ servers:
         \  include_summary: 是否包含文章摘要，默认False\n\nReturns:\n    JSON格式的匹配 RSS 条目列表\n\
         \nExamples:\n    - search_rss(keyword=\"AI\")\n    - search_rss(keyword=\"\
         machine learning\", feeds=['hacker-news'], days=14)"
+      enabled: false
       input_schema:
         properties:
           days:
@@ -226,6 +229,7 @@ servers:
         \    - today_feeds: 今日各 RSS 源的数据统计\n        - {feed_id}: { name, item_count\
         \ }\n    - generated_at: 生成时间\n\nExamples:\n    - get_rss_feeds_status() \
         \ # 查看所有 RSS 源状态"
+      enabled: false
       input_schema:
         properties: {}
         type: object
@@ -242,6 +246,7 @@ servers:
         \n**重要：数据展示建议**\n本工具会返回完整的新闻列表（通常50条）给你。但请注意：\n- **工具返回**：完整的50条数据 ✅\n- **建议展示**：向用户展示全部数据，除非用户明确要求总结\n\
         - **用户期望**：用户可能需要完整数据，请谨慎总结\n\n**何时可以总结**：\n- 用户明确说\"给我总结一下\"或\"挑重点说\"\n-\
         \ 数据量超过100条时，可先展示部分并询问是否查看全部\n\n**注意**：如果用户询问\"为什么只显示了部分\"，说明他们需要完整数据"
+      enabled: true
       input_schema:
         properties:
           date_range:
@@ -287,6 +292,7 @@ servers:
         \n    推荐调用流程：\n    1. resolve_date_range(\"最近30天\") → {\"date_range\": {\"\
         start\": \"2025-10-28\", \"end\": \"2025-11-26\"}}\n    2. analyze_topic_trend(topic=\"\
         特斯拉\", analysis_type=\"lifecycle\", date_range=...)"
+      enabled: true
       input_schema:
         properties:
           analysis_type:
@@ -310,7 +316,7 @@ servers:
             default: 6
             type: integer
           spike_threshold:
-            default: 3.0
+            default: 3
             type: number
           time_window:
             default: 24
@@ -335,6 +341,7 @@ servers:
         , date_range={\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"})\n    -\
         \ analyze_data_insights(insight_type=\"keyword_cooccur\", min_frequency=5,\
         \ top_n=15)"
+      enabled: true
       input_schema:
         properties:
           date_range:
@@ -382,6 +389,7 @@ servers:
         , \"end\": \"2025-11-26\"}}\n    2. analyze_sentiment(topic=\"特斯拉\", date_range={\"\
         start\": \"2025-11-20\", \"end\": \"2025-11-26\"})\n\n**重要：数据展示策略**\n- 本工具返回完整的分析结果和新闻列表\n\
         - **默认展示方式**：展示完整的分析结果（包括所有新闻）\n- 仅在用户明确要求\"总结\"或\"挑重点\"时才进行筛选"
+      enabled: true
       input_schema:
         properties:
           date_range:
@@ -427,6 +435,7 @@ servers:
         last_week\")\n    - 自定义日期范围: find_related_news(reference_title=\"AI突破\", date_range={\"\
         start\": \"2025-01-01\", \"end\": \"2025-01-15\"})\n\n**重要：数据展示策略**\n- 本工具返回完整的相关新闻列表（包括相似度分数）\n\
         - 仅在用户明确要求\"总结\"时才进行筛选"
+      enabled: false
       input_schema:
         properties:
           date_range:
@@ -458,6 +467,7 @@ servers:
         : \"YYYY-MM-DD\", \"end\": \"YYYY-MM-DD\"}\n                - **示例**: {\"\
         start\": \"2025-01-01\", \"end\": \"2025-01-07\"}\n                - **重要**:\
         \ 必须是对象格式，不能传递整数\n\nReturns:\n    JSON格式的摘要报告，包含Markdown格式内容"
+      enabled: false
       input_schema:
         properties:
           date_range:
@@ -489,6 +499,7 @@ servers:
         \  # 更严格的相似度匹配\n    - aggregate_news(date_range={\"start\": \"2025-01-01\"\
         , \"end\": \"2025-01-07\"})\n\n**重要：数据展示策略**\n- 本工具返回去重聚合后的新闻列表\n- 跨平台新闻（is_cross_platform=true）通常更具新闻价值\n\
         - 可优先展示 platform_count > 1 的新闻"
+      enabled: true
       input_schema:
         properties:
           date_range:
@@ -534,6 +545,7 @@ servers:
         \        period1={\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"},\n \
         \       period2={\"start\": \"2025-01-08\", \"end\": \"2025-01-14\"},\n  \
         \      topic=\"人工智能\"\n      )"
+      enabled: false
       input_schema:
         properties:
           compare_type:
@@ -602,6 +614,7 @@ servers:
         \    用户：\"今天的AI新闻\"（默认今天，无需解析）\n    → search_news(query=\"AI\")\n\n**重要：数据展示策略**\n\
         - 本工具返回完整的搜索结果列表\n- **默认展示方式**：展示全部返回的新闻，无需总结或筛选\n- 仅在用户明确要求\"总结\"或\"挑重点\"\
         时才进行筛选\n- 当include_rss=True时，热榜和RSS结果分开展示，RSS在热榜之后"
+      enabled: false
       input_schema:
         properties:
           date_range:
@@ -650,6 +663,7 @@ servers:
     - description: "获取当前系统配置\n\nArgs:\n    section: 配置节，可选值：\n        - \"all\": 所有配置（默认）\n\
         \        - \"crawler\": 爬虫配置\n        - \"push\": 推送配置\n        - \"keywords\"\
         : 关键词配置\n        - \"weights\": 权重配置\n\nReturns:\n    JSON格式的配置信息"
+      enabled: false
       input_schema:
         properties:
           section:
@@ -659,6 +673,7 @@ servers:
       name: get_current_config
       server: hotfind
     - description: "获取系统运行状态和健康检查信息\n\n返回系统版本、数据统计、缓存状态等信息\n\nReturns:\n    JSON格式的系统状态信息"
+      enabled: false
       input_schema:
         properties: {}
         type: object
@@ -677,6 +692,7 @@ servers:
         \            - need_update: 是否需要更新\n            - message: 状态描述\n        -\
         \ any_update: 是否有任何组件需要更新\n\nExamples:\n    - check_version()  # 直接检查两个组件的版本\n\
         \    - check_version(proxy_url=\"http://127.0.0.1:7890\")  # 使用代理访问 GitHub"
+      enabled: false
       input_schema:
         properties:
           proxy_url:
@@ -697,6 +713,7 @@ servers:
         \ 爬取的新闻总数\n    - data: 新闻数据\n\nExamples:\n    - 临时爬取: trigger_crawl(platforms=['zhihu'])\n\
         \    - 爬取并保存: trigger_crawl(platforms=['weibo'], save_to_local=True)\n   \
         \ - 使用默认平台: trigger_crawl()  # 爬取config.yaml中配置的所有平台"
+      enabled: false
       input_schema:
         properties:
           include_url:
@@ -725,6 +742,7 @@ servers:
         \ config/config.yaml 中配置远程存储（storage.remote）或设置环境变量：\n    - S3_ENDPOINT_URL:\
         \ 服务端点\n    - S3_BUCKET_NAME: 存储桶名称\n    - S3_ACCESS_KEY_ID: 访问密钥 ID\n   \
         \ - S3_SECRET_ACCESS_KEY: 访问密钥"
+      enabled: false
       input_schema:
         properties:
           days:
@@ -741,6 +759,7 @@ servers:
         \        - endpoint_url: 服务端点\n        - bucket_name: 存储桶名称\n        - date_count:\
         \ 远程日期数量\n    - pull: 拉取配置\n        - enabled: 是否启用自动拉取\n        - days: 自动拉取天数\n\
         \nExamples:\n    - get_storage_status()  # 查看所有存储状态"
+      enabled: false
       input_schema:
         properties: {}
         type: object
@@ -758,6 +777,7 @@ servers:
         \      - both: 两边都存在的日期\n\nExamples:\n    - list_available_dates()  # 查看本地和远程的对比\n\
         \    - list_available_dates(source=\"local\")  # 仅查看本地\n    - list_available_dates(source=\"\
         remote\")  # 仅查看远程"
+      enabled: false
       input_schema:
         properties:
           source:

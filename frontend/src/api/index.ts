@@ -837,6 +837,7 @@ export interface MCPTool {
   name: string
   description: string
   input_schema?: MCPToolInputSchema
+  enabled?: boolean  // 工具启用状态
 }
 
 export interface MCPStatus {
@@ -940,6 +941,32 @@ export async function getMCPStatus(): Promise<{
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
       const errorMessage = error.response?.data?.error || error.message || '获取 MCP 状态失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误' }
+  }
+}
+
+// 更新 MCP 工具启用状态
+export async function updateMCPToolStatus(
+  serverName: string,
+  toolName: string | null,  // null 表示批量更新该服务器下所有工具
+  enabled: boolean
+): Promise<{
+  success: boolean
+  message?: string
+  error?: string
+}> {
+  try {
+    const response = await axios.patch(`${API_BASE_URL}/config/mcp/tools/status`, {
+      server_name: serverName,
+      tool_name: toolName,
+      enabled
+    })
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      const errorMessage = error.response?.data?.error || error.message || '更新工具状态失败'
       return { success: false, error: errorMessage }
     }
     return { success: false, error: '未知错误' }

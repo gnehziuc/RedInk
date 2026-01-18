@@ -717,6 +717,7 @@ def create_mcp_config_blueprint():
           - server: 所属服务器
           - name: 工具名称
           - description: 工具描述
+          - enabled: 是否启用
         """
         try:
             manager = get_mcp_manager()
@@ -727,7 +728,8 @@ def create_mcp_config_blueprint():
                     'server': t.server_name,
                     'name': t.name,
                     'description': t.description,
-                    'input_schema': _sanitize_for_json(t.input_schema)
+                    'input_schema': _sanitize_for_json(t.input_schema),
+                    'enabled': t.enabled  # 包含启用状态
                 }
                 for t in tools
             ]
@@ -742,6 +744,50 @@ def create_mcp_config_blueprint():
             return jsonify({
                 "success": False,
                 "error": f"获取工具列表失败: {str(e)}"
+            }), 500
+
+    @mcp_bp.route('/config/mcp/tools/status', methods=['PATCH'])
+    def update_mcp_tool_status():
+        """
+        更新 MCP 工具的启用状态
+
+        请求体：
+        - server_name: 服务器名称
+        - tool_name: 工具名称（可选，不提供时批量更新该服务器下所有工具）
+        - enabled: 启用状态
+
+        返回：
+        - success: 是否成功
+        - message: 结果消息
+        """
+        try:
+            data = request.get_json()
+            server_name = data.get('server_name')
+            tool_name = data.get('tool_name')  # 可选，为 None 时批量更新
+            enabled = data.get('enabled')
+
+            if not server_name:
+                return jsonify({
+                    "success": False,
+                    "error": "缺少 server_name 参数"
+                }), 400
+
+            if enabled is None:
+                return jsonify({
+                    "success": False,
+                    "error": "缺少 enabled 参数"
+                }), 400
+
+            manager = get_mcp_manager()
+            result = manager.update_tool_enabled(server_name, tool_name, enabled)
+
+            return jsonify(result), 200 if result['success'] else 400
+
+        except Exception as e:
+            logger.error(f"更新工具状态失败: {e}")
+            return jsonify({
+                "success": False,
+                "error": f"更新失败: {str(e)}"
             }), 500
 
     @mcp_bp.route('/config/mcp/status', methods=['GET'])

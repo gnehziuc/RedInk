@@ -43,6 +43,7 @@ class MCPTool:
     description: str
     input_schema: Dict[str, Any] = field(default_factory=dict)
     server_name: str = ""
+    enabled: bool = True  # 工具级别的启用状态
 
 
 class BaseMCPClient(ABC):
@@ -76,19 +77,34 @@ class BaseMCPClient(ABC):
         """发送 JSON-RPC 请求"""
         pass
 
-    async def _fetch_tools(self):
-        """获取服务器提供的工具列表"""
+    async def _fetch_tools(self, tools_config: Optional[List[Dict[str, Any]]] = None):
+        """获取服务器提供的工具列表
+
+        Args:
+            tools_config: 可选的工具配置列表，用于同步 enabled 状态
+        """
         try:
             result = await self._send_request('tools/list', {})
 
             if result and 'tools' in result:
+                # 构建工具配置映射（如果提供了配置）
+                enabled_map = {}
+                if tools_config:
+                    for tc in tools_config:
+                        if isinstance(tc, dict) and 'name' in tc:
+                            enabled_map[tc['name']] = tc.get('enabled', True)
+
                 self.tools = []
                 for tool_data in result['tools']:
+                    tool_name = tool_data.get('name', '')
+                    # 从配置中获取 enabled 状态，默认为 True
+                    enabled = enabled_map.get(tool_name, True)
                     tool = MCPTool(
-                        name=tool_data.get('name', ''),
+                        name=tool_name,
                         description=tool_data.get('description', ''),
                         input_schema=tool_data.get('inputSchema', {}),
-                        server_name=self.server_name
+                        server_name=self.server_name,
+                        enabled=enabled
                     )
                     self.tools.append(tool)
 
@@ -647,6 +663,10 @@ class MCPClientManager:
             success = await client.connect()
 
             if success:
+                # 获取配置中保存的工具列表（包含 enabled 状态）
+                tools_config = server_config.get('tools', [])
+                # 重新获取工具并同步 enabled 状态
+                await client._fetch_tools(tools_config)
                 self._clients[server_name] = client
             else:
                 logger.warning(f"[{server_name}] 连接失败，跳过")
@@ -675,7 +695,8 @@ class MCPClientManager:
                         'name': t.name,
                         'description': t.description,
                         'server': server_name,
-                        'input_schema': _sanitize_for_json(t.input_schema)
+                        'input_schema': _sanitize_for_json(t.input_schema),
+                        'enabled': t.enabled  # 包含启用状态
                     }
                     for t in tools
                 ]
@@ -718,6 +739,69 @@ class MCPClientManager:
     def is_initialized(self) -> bool:
         """检查是否已初始化"""
         return self._initialized
+
+    def update_tool_enabled(self, server_name: str, tool_name: Optional[str], enabled: bool) -> Dict[str, Any]:
+        """更新工具的启用状态
+
+        Args:
+            server_name: 服务器名称
+            tool_name: 工具名称，为 None 时批量更新该服务器下所有工具
+            enabled: 启用状态
+
+        Returns:
+            操作结果字典
+        """
+        config = self._load_config()
+        servers = config.get('servers', {})
+
+        if server_name not in servers:
+            return {'success': False, 'error': f'服务器 "{server_name}" 不存在'}
+
+        server_config = servers[server_name]
+        tools = server_config.get('tools', [])
+
+        if not tools:
+            return {'success': False, 'error': f'服务器 "{server_name}" 没有工具列表'}
+
+        updated_count = 0
+        if tool_name:
+            # 更新单个工具
+            for tool in tools:
+                if isinstance(tool, dict) and tool.get('name') == tool_name:
+                    tool['enabled'] = enabled
+                    updated_count = 1
+                    break
+
+            if updated_count == 0:
+                return {'success': False, 'error': f'工具 "{tool_name}" 不存在'}
+        else:
+            # 批量更新所有工具
+            for tool in tools:
+                if isinstance(tool, dict):
+                    tool['enabled'] = enabled
+                    updated_count += 1
+
+        # 保存配置
+        server_config['tools'] = tools
+        servers[server_name] = server_config
+        config['servers'] = servers
+        self.save_config(config)
+
+        # 同步内存中客户端的工具状态
+        client = self._clients.get(server_name)
+        if client:
+            if tool_name:
+                for t in client.tools:
+                    if t.name == tool_name:
+                        t.enabled = enabled
+                        break
+            else:
+                for t in client.tools:
+                    t.enabled = enabled
+
+        action = f'工具 "{tool_name}"' if tool_name else f'{updated_count} 个工具'
+        status = '已启用' if enabled else '已禁用'
+        return {'success': True, 'message': f'{action} {status}'}
 
 
 # 全局单例

@@ -118,22 +118,51 @@
           <!-- 工具列表 -->
           <div v-if="serverTools[serverName as string]?.length > 0" class="tools-section">
             <div class="tools-header">
-              可用工具 ({{ serverTools[serverName as string].length }})
+              <span class="tools-title">
+                可用工具 ({{ getEnabledToolCount(serverName as string) }}/{{ serverTools[serverName as string].length }} 已启用)
+              </span>
+              <div class="tools-batch-actions">
+                <button
+                  class="btn btn-tiny btn-outline"
+                  @click.stop="enableAllTools(serverName as string)"
+                  title="启用所有工具"
+                >
+                  全部启用
+                </button>
+                <button
+                  class="btn btn-tiny btn-outline"
+                  @click.stop="disableAllTools(serverName as string)"
+                  title="禁用所有工具"
+                >
+                  全部禁用
+                </button>
+              </div>
             </div>
             <div class="tools-list">
               <div
                 v-for="tool in serverTools[serverName as string]"
                 :key="tool.name"
                 class="tool-item"
+                :class="{ 'tool-disabled': tool.enabled === false }"
               >
                 <div class="tool-header" @click="toggleToolExpand(serverName as string, tool.name)">
                   <div class="tool-main">
                     <div class="tool-name">{{ tool.name }}</div>
                     <div class="tool-description">{{ tool.description || '无描述' }}</div>
                   </div>
-                  <span class="tool-expand-icon">
-                    {{ expandedTools.has(`${serverName}:${tool.name}`) ? '▼' : '▶' }}
-                  </span>
+                  <div class="tool-actions">
+                    <label class="tool-toggle" @click.stop>
+                      <input
+                        type="checkbox"
+                        :checked="tool.enabled !== false"
+                        @change="toggleToolEnabled(serverName as string, tool.name, $event)"
+                      />
+                      <span class="toggle-slider-small"></span>
+                    </label>
+                    <span class="tool-expand-icon">
+                      {{ expandedTools.has(`${serverName}:${tool.name}`) ? '▼' : '▶' }}
+                    </span>
+                  </div>
                 </div>
                 <!-- 工具参数详情 -->
                 <div v-if="expandedTools.has(`${serverName}:${tool.name}`)" class="tool-params">
@@ -308,6 +337,7 @@ import {
   updateMCPConfig,
   testMCPConnection,
   getMCPStatus,
+  updateMCPToolStatus,
   type MCPConfig,
   type MCPTool
 } from '../../api'
@@ -669,6 +699,80 @@ function showMessage(msg: string, type: 'success' | 'error') {
   }, 3000)
 }
 
+// 切换单个工具的启用状态
+async function toggleToolEnabled(serverName: string, toolName: string, event: Event) {
+  const target = event.target as HTMLInputElement
+  const enabled = target.checked
+
+  // 乐观更新本地状态
+  const tools = serverTools.value[serverName]
+  const tool = tools?.find(t => t.name === toolName)
+  if (tool) {
+    tool.enabled = enabled
+  }
+
+  // 同时更新配置中的工具状态
+  const serverConfig = config.servers[serverName]
+  if (serverConfig?.tools) {
+    const configTool = serverConfig.tools.find(t => t.name === toolName)
+    if (configTool) {
+      configTool.enabled = enabled
+    }
+  }
+
+  // 调用 API 持久化
+  const result = await updateMCPToolStatus(serverName, toolName, enabled)
+  if (!result.success) {
+    // 回滚
+    if (tool) tool.enabled = !enabled
+    if (serverConfig?.tools) {
+      const configTool = serverConfig.tools.find(t => t.name === toolName)
+      if (configTool) configTool.enabled = !enabled
+    }
+    showMessage(result.error || '更新工具状态失败', 'error')
+  } else {
+    showMessage(enabled ? `工具 "${toolName}" 已启用` : `工具 "${toolName}" 已禁用`, 'success')
+  }
+}
+
+// 启用服务器下所有工具
+async function enableAllTools(serverName: string) {
+  const result = await updateMCPToolStatus(serverName, null, true)
+  if (result.success) {
+    // 更新本地状态
+    serverTools.value[serverName]?.forEach(t => t.enabled = true)
+    const serverConfig = config.servers[serverName]
+    if (serverConfig?.tools) {
+      serverConfig.tools.forEach(t => t.enabled = true)
+    }
+    showMessage('已启用所有工具', 'success')
+  } else {
+    showMessage(result.error || '批量启用失败', 'error')
+  }
+}
+
+// 禁用服务器下所有工具
+async function disableAllTools(serverName: string) {
+  const result = await updateMCPToolStatus(serverName, null, false)
+  if (result.success) {
+    // 更新本地状态
+    serverTools.value[serverName]?.forEach(t => t.enabled = false)
+    const serverConfig = config.servers[serverName]
+    if (serverConfig?.tools) {
+      serverConfig.tools.forEach(t => t.enabled = false)
+    }
+    showMessage('已禁用所有工具', 'success')
+  } else {
+    showMessage(result.error || '批量禁用失败', 'error')
+  }
+}
+
+// 获取启用的工具数量
+function getEnabledToolCount(serverName: string): number {
+  const tools = serverTools.value[serverName] || []
+  return tools.filter(t => t.enabled !== false).length
+}
+
 onMounted(() => {
   loadConfig()
 })
@@ -897,10 +1001,27 @@ onMounted(() => {
 }
 
 .tools-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.tools-title {
   font-size: 14px;
   font-weight: 500;
   color: #333;
-  margin-bottom: 12px;
+}
+
+.tools-batch-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.btn-tiny {
+  padding: 4px 8px;
+  font-size: 11px;
+  border-radius: 4px;
 }
 
 .tools-list {
@@ -913,6 +1034,17 @@ onMounted(() => {
   background: #f8f9fa;
   border-radius: 6px;
   overflow: hidden;
+  transition: opacity 0.2s, background 0.2s;
+}
+
+.tool-item.tool-disabled {
+  opacity: 0.6;
+  background: #f0f0f0;
+}
+
+.tool-item.tool-disabled .tool-name {
+  text-decoration: line-through;
+  color: #999;
 }
 
 .tool-header {
@@ -944,6 +1076,54 @@ onMounted(() => {
   font-size: 12px;
   color: #666;
   line-height: 1.4;
+}
+
+.tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.tool-toggle {
+  position: relative;
+  display: inline-block;
+  cursor: pointer;
+}
+
+.tool-toggle input {
+  display: none;
+}
+
+.toggle-slider-small {
+  position: relative;
+  display: inline-block;
+  width: 32px;
+  height: 18px;
+  background: #ccc;
+  border-radius: 9px;
+  transition: background 0.3s;
+}
+
+.toggle-slider-small::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.tool-toggle input:checked + .toggle-slider-small {
+  background: var(--primary, #ff2442);
+}
+
+.tool-toggle input:checked + .toggle-slider-small::after {
+  transform: translateX(14px);
 }
 
 .tool-expand-icon {
