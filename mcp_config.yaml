@@ -1,8 +1,13 @@
 enabled: true
 servers:
   exa:
+    args:
+    - -y
+    - mcp-remote
+    - https://mcp.exa.ai/mcp
+    command: npx
     enabled: true
-    headers: {}
+    env: {}
     tools:
     - description: Search the web using Exa AI - performs real-time web searches and
         can scrape content from specific URLs. Supports configurable result counts
@@ -72,8 +77,7 @@ servers:
         type: object
       name: get_code_context_exa
       server: exa
-    type: streamableHttp
-    url: https://mcp.exa.ai/mcp
+    type: stdio
   hotfind:
     enabled: true
     headers: {}
