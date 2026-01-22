@@ -200,8 +200,9 @@ class ImageApiGenerator(ImageGeneratorBase):
         reference_image: Optional[bytes] = None,
         reference_images: Optional[List[bytes]] = None
     ) -> bytes:
-        """通过 /v1/chat/completions 端点生成图片（如即梦 API）"""
+        """通过 /v1/chat/completions 端点生成图片（如即梦 API），使用流式输出"""
         import re
+        import json as json_module
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -238,13 +239,14 @@ class ImageApiGenerator(ImageGeneratorBase):
             "model": model,
             "messages": [{"role": "user", "content": user_content}],
             "max_tokens": 4096,
-            "temperature": 1.0
+            "temperature": 1.0,
+            "stream": True
         }
 
         api_url = f"{self.base_url}{self.endpoint_type}"
-        logger.info(f"Chat API 生成图片: {api_url}, model={model}")
+        logger.info(f"Chat API 生成图片 (流式): {api_url}, model={model}")
 
-        response = requests.post(api_url, headers=headers, json=payload, timeout=300)
+        response = requests.post(api_url, headers=headers, json=payload, timeout=300, stream=True)
 
         if response.status_code != 200:
             error_detail = response.text[:500]
@@ -274,45 +276,77 @@ class ImageApiGenerator(ImageGeneratorBase):
                     f"【模型】{model}"
                 )
 
-        result = response.json()
-        logger.debug(f"Chat API 响应: {str(result)[:500]}")
+        # 流式解析 SSE 响应
+        content = ""
+        logger.debug("开始接收流式响应...")
 
-        # 解析响应
-        if "choices" in result and len(result["choices"]) > 0:
-            choice = result["choices"][0]
-            if "message" in choice and "content" in choice["message"]:
-                content = choice["message"]["content"]
+        for line in response.iter_lines():
+            if not line:
+                continue
 
-                if isinstance(content, str):
-                    # Markdown 图片链接: ![xxx](url)
-                    pattern = r'!\[.*?\]\((https?://[^\s\)]+)\)'
-                    urls = re.findall(pattern, content)
-                    if urls:
-                        logger.info(f"从 Markdown 提取到 {len(urls)} 张图片，下载第一张...")
-                        return self._download_image(urls[0])
+            line_str = line.decode('utf-8')
 
-                    # Markdown 图片 Base64: ![xxx](data:image/...)
-                    base64_pattern = r'!\[.*?\]\((data:image\/[^;]+;base64,[^\s\)]+)\)'
-                    base64_urls = re.findall(base64_pattern, content)
-                    if base64_urls:
-                        logger.info("从 Markdown 提取到 Base64 图片数据")
-                        base64_data = base64_urls[0].split(",")[1]
-                        return base64.b64decode(base64_data)
+            # 跳过非数据行
+            if not line_str.startswith('data:'):
+                continue
 
-                    # 纯 Base64 data URL
-                    if content.startswith("data:image"):
-                        logger.info("检测到 Base64 图片数据")
-                        base64_data = content.split(",")[1]
-                        return base64.b64decode(base64_data)
+            # 提取 JSON 数据
+            data_str = line_str[5:].strip()
 
-                    # 纯 URL
-                    if content.startswith("http://") or content.startswith("https://"):
-                        logger.info("检测到图片 URL")
-                        return self._download_image(content.strip())
+            # 跳过结束标记
+            if data_str == '[DONE]':
+                logger.debug("收到流式结束标记 [DONE]")
+                break
+
+            try:
+                chunk = json_module.loads(data_str)
+
+                # 解析 delta 内容
+                if "choices" in chunk and len(chunk["choices"]) > 0:
+                    choice = chunk["choices"][0]
+                    delta = choice.get("delta", {})
+                    delta_content = delta.get("content", "")
+                    if delta_content:
+                        content += delta_content
+                        logger.debug(f"  收到 chunk: +{len(delta_content)} 字符")
+
+            except json_module.JSONDecodeError as e:
+                logger.warning(f"解析流式数据失败: {data_str[:100]}, error: {e}")
+                continue
+
+        logger.debug(f"流式响应完成，总内容长度: {len(content)} 字符")
+
+        # 解析图片数据
+        if content:
+            # Markdown 图片链接: ![xxx](url)
+            pattern = r'!\[.*?\]\((https?://[^\s\)]+)\)'
+            urls = re.findall(pattern, content)
+            if urls:
+                logger.info(f"从 Markdown 提取到 {len(urls)} 张图片，下载第一张...")
+                return self._download_image(urls[0])
+
+            # Markdown 图片 Base64: ![xxx](data:image/...)
+            base64_pattern = r'!\[.*?\]\((data:image\/[^;]+;base64,[^\s\)]+)\)'
+            base64_urls = re.findall(base64_pattern, content)
+            if base64_urls:
+                logger.info("从 Markdown 提取到 Base64 图片数据")
+                base64_data = base64_urls[0].split(",")[1]
+                return base64.b64decode(base64_data)
+
+            # 纯 Base64 data URL
+            if content.startswith("data:image"):
+                logger.info("检测到 Base64 图片数据")
+                base64_data = content.split(",")[1]
+                return base64.b64decode(base64_data)
+
+            # 纯 URL
+            if content.startswith("http://") or content.startswith("https://"):
+                logger.info("检测到图片 URL")
+                return self._download_image(content.strip())
 
         raise Exception(
-            "❌ 无法从 Chat API 响应中提取图片数据\n\n"
-            f"【响应内容】\n{str(result)[:500]}\n\n"
+            "❌ 无法从 Chat API 流式响应中提取图片数据\n\n"
+            f"【响应内容】\n{content[:500] if content else '(空)'}\n\n"
             "【可能原因】\n"
             "1. 该模型不支持图片生成\n"
             "2. 响应格式与预期不符\n"

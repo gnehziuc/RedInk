@@ -95,14 +95,13 @@
        <button class="page-btn" :disabled="currentPage === totalPages" @click="changePage(currentPage + 1)">Next</button>
     </div>
 
-    <!-- Image Viewer Modal -->
-    <ImageGalleryModal
+    <!-- 内容预览模态框 (小红书风格) -->
+    <ContentPreviewModal
       v-if="viewingRecord"
       :visible="!!viewingRecord"
       :record="viewingRecord"
       :regeneratingImages="regeneratingImages"
       @close="closeGallery"
-      @showOutline="showOutlineModal = true"
       @regenerate="regenerateHistoryImage"
       @downloadAll="downloadAllImages"
       @download="downloadImage"
@@ -139,6 +138,7 @@ import { useGeneratorStore } from '../stores/generator'
 import StatsOverview from '../components/history/StatsOverview.vue'
 import GalleryCard from '../components/history/GalleryCard.vue'
 import ImageGalleryModal from '../components/history/ImageGalleryModal.vue'
+import ContentPreviewModal from '../components/history/ContentPreviewModal.vue'
 import OutlineModal from '../components/history/OutlineModal.vue'
 
 const router = useRouter()
