@@ -29,6 +29,8 @@ def create_api_blueprint():
     from .history_routes import create_history_blueprint
     from .config_routes import create_config_blueprint, create_mcp_config_blueprint
     from .content_routes import create_content_blueprint
+    from .account_routes import create_account_blueprint
+    from .publish_routes import create_publish_blueprint
 
     # 创建主 API 蓝图
     api_bp = Blueprint('api', __name__, url_prefix='/api')
@@ -40,6 +42,8 @@ def create_api_blueprint():
     api_bp.register_blueprint(create_config_blueprint())
     api_bp.register_blueprint(create_content_blueprint())
     api_bp.register_blueprint(create_mcp_config_blueprint())
+    api_bp.register_blueprint(create_account_blueprint())
+    api_bp.register_blueprint(create_publish_blueprint())
 
     return api_bp
 

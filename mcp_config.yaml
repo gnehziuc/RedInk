@@ -8,75 +8,6 @@ servers:
     command: npx
     enabled: true
     env: {}
-    tools:
-    - description: Search the web using Exa AI - performs real-time web searches and
-        can scrape content from specific URLs. Supports configurable result counts
-        and returns the content from the most relevant websites.
-      enabled: true
-      input_schema:
-        $schema: http://json-schema.org/draft-07/schema#
-        additionalProperties: false
-        properties:
-          contextMaxCharacters:
-            description: 'Maximum characters for context string optimized for LLMs
-              (default: 10000)'
-            type: number
-          livecrawl:
-            description: 'Live crawl mode - ''fallback'': use live crawling as backup
-              if cached content unavailable, ''preferred'': prioritize live crawling
-              (default: ''fallback'')'
-            enum:
-            - fallback
-            - preferred
-            type: string
-          numResults:
-            description: 'Number of search results to return (default: 8)'
-            type: number
-          query:
-            description: Websearch query
-            type: string
-          type:
-            description: 'Search type - ''auto'': balanced search (default), ''fast'':
-              quick results, ''deep'': comprehensive search'
-            enum:
-            - auto
-            - fast
-            - deep
-            type: string
-        required:
-        - query
-        type: object
-      name: web_search_exa
-      server: exa
-    - description: 'Search and get relevant context for any programming task. Exa-code
-        has the highest quality and freshest context for libraries, SDKs, and APIs.
-        Use this tool for ANY question or task for related to programming. RULE: when
-        the user''s query contains exa-code or anything related to code, you MUST
-        use this tool.'
-      enabled: false
-      input_schema:
-        $schema: http://json-schema.org/draft-07/schema#
-        additionalProperties: false
-        properties:
-          query:
-            description: Search query to find relevant context for APIs, Libraries,
-              and SDKs. For example, 'React useState hook examples', 'Python pandas
-              dataframe filtering', 'Express.js middleware', 'Next js partial prerendering
-              configuration'
-            type: string
-          tokensNum:
-            default: 5000
-            description: Number of tokens to return (1000-50000). Default is 5000
-              tokens. Adjust this value based on how much context you need - use lower
-              values for focused queries and higher values for comprehensive documentation.
-            maximum: 50000
-            minimum: 1000
-            type: number
-        required:
-        - query
-        type: object
-      name: get_code_context_exa
-      server: exa
     type: stdio
   hotfind:
     enabled: true
@@ -146,7 +77,7 @@ servers:
         \        - \"auto_extract\": 自动从新闻标题提取高频词（无需预设，自动发现热点）\n\nReturns:\n    JSON格式的话题频率统计列表\n\
         \nExamples:\n    - 使用预设关注词: get_trending_topics(mode=\"current\")\n    - 自动提取热点:\
         \ get_trending_topics(extract_mode=\"auto_extract\", top_n=20)"
-      enabled: false
+      enabled: true
       input_schema:
         properties:
           extract_mode:
@@ -296,7 +227,7 @@ servers:
         \n    推荐调用流程：\n    1. resolve_date_range(\"最近30天\") → {\"date_range\": {\"\
         start\": \"2025-10-28\", \"end\": \"2025-11-26\"}}\n    2. analyze_topic_trend(topic=\"\
         特斯拉\", analysis_type=\"lifecycle\", date_range=...)"
-      enabled: true
+      enabled: false
       input_schema:
         properties:
           analysis_type:
@@ -345,7 +276,7 @@ servers:
         , date_range={\"start\": \"2025-01-01\", \"end\": \"2025-01-07\"})\n    -\
         \ analyze_data_insights(insight_type=\"keyword_cooccur\", min_frequency=5,\
         \ top_n=15)"
-      enabled: true
+      enabled: false
       input_schema:
         properties:
           date_range:
@@ -393,7 +324,7 @@ servers:
         , \"end\": \"2025-11-26\"}}\n    2. analyze_sentiment(topic=\"特斯拉\", date_range={\"\
         start\": \"2025-11-20\", \"end\": \"2025-11-26\"})\n\n**重要：数据展示策略**\n- 本工具返回完整的分析结果和新闻列表\n\
         - **默认展示方式**：展示完整的分析结果（包括所有新闻）\n- 仅在用户明确要求\"总结\"或\"挑重点\"时才进行筛选"
-      enabled: true
+      enabled: false
       input_schema:
         properties:
           date_range:
@@ -503,7 +434,7 @@ servers:
         \  # 更严格的相似度匹配\n    - aggregate_news(date_range={\"start\": \"2025-01-01\"\
         , \"end\": \"2025-01-07\"})\n\n**重要：数据展示策略**\n- 本工具返回去重聚合后的新闻列表\n- 跨平台新闻（is_cross_platform=true）通常更具新闻价值\n\
         - 可优先展示 platform_count > 1 的新闻"
-      enabled: true
+      enabled: false
       input_schema:
         properties:
           date_range:

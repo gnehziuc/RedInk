@@ -6,6 +6,8 @@ import ResultView from '../views/ResultView.vue'
 import HistoryView from '../views/HistoryView.vue'
 import SettingsView from '../views/SettingsView.vue'
 import CreationCenterView from '../views/CreationCenterView.vue'
+import AccountManagementView from '../views/AccountManagementView.vue'
+import PublishView from '../views/PublishView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -54,8 +56,19 @@ const router = createRouter({
       path: '/settings',
       name: 'settings',
       component: SettingsView
+    },
+    {
+      path: '/account-management',
+      name: 'account-management',
+      component: AccountManagementView
+    },
+    {
+      path: '/publish',
+      name: 'publish',
+      component: PublishView
     }
   ]
 })
 
 export default router
+
