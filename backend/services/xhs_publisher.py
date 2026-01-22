@@ -56,7 +56,7 @@ class XiaoHongShuImagePost:
         self.headless = LOCAL_CHROME_HEADLESS
         self.date_format = '%Y-%m-%d %H:%M'
     
-    async def _wait_for_upload_complete(self, page: Page, timeout: int = 60):
+    async def _wait_for_upload_complete(self, page: Page, timeout: int = 120):
         """等待图片上传完成"""
         logger.info("等待图片上传完成...")
         start_time = asyncio.get_event_loop().time()
@@ -69,13 +69,41 @@ class XiaoHongShuImagePost:
             # 检查是否有上传进度或已完成的指示
             # 小红书图片上传成功后会显示图片预览
             try:
-                # 查找已上传的图片元素
-                uploaded_images = await page.locator('div.image-item, div.upload-item').count()
-                if uploaded_images >= len(self.image_paths):
-                    logger.info(f"检测到 {uploaded_images} 张图片已上传")
-                    break
-            except Exception:
-                pass
+                # 尝试多种选择器来检测已上传的图片
+                selectors = [
+                    'div.image-item',
+                    'div.upload-item',
+                    'div[class*="image"] img',
+                    'div[class*="upload"] img',
+                    'div[class*="preview"] img',
+                    '.c-image-item',
+                    '[class*="imgItem"]',
+                    '.upload-list img'
+                ]
+                
+                for selector in selectors:
+                    try:
+                        count = await page.locator(selector).count()
+                        if count >= len(self.image_paths):
+                            logger.info(f"检测到 {count} 张图片已上传 (选择器: {selector})")
+                            return
+                    except Exception:
+                        pass
+                
+                # 检查是否有上传中的进度条消失
+                uploading = await page.locator('[class*="uploading"], [class*="progress"]').count()
+                if uploading == 0:
+                    # 没有上传进度条了，检查是否有任何图片
+                    for selector in selectors:
+                        try:
+                            if await page.locator(selector).count() > 0:
+                                logger.info("上传进度完成，检测到图片元素")
+                                return
+                        except Exception:
+                            pass
+                
+            except Exception as e:
+                logger.debug(f"检测上传状态时出错: {e}")
             
             await asyncio.sleep(1)
     

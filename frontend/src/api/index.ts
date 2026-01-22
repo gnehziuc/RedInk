@@ -972,3 +972,70 @@ export async function updateMCPToolStatus(
     return { success: false, error: '未知错误' }
   }
 }
+
+// ==================== 发布相关 API ====================
+
+export interface Account {
+  id: number
+  type: number  // 1=小红书 2=视频号 3=抖音 4=快手
+  filePath: string
+  userName: string
+  status: number  // 0=失效 1=有效
+}
+
+// 获取账号列表
+export async function getAccounts(): Promise<{
+  code: number
+  msg: string | null
+  data: Account[]
+}> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/accounts`)
+    return response.data
+  } catch (error: any) {
+    return { code: 500, msg: error.message, data: [] }
+  }
+}
+
+// 发布小红书图文笔记
+export async function publishToXhs(params: {
+  account_id: number
+  title: string
+  content: string
+  image_paths: string[]
+  tags?: string[]
+  publish_date?: string
+}): Promise<{
+  code: number
+  msg: string
+  data: { task_id: string } | null
+}> {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/publish/xhs/image`, params)
+    return response.data
+  } catch (error: any) {
+    return { code: 500, msg: error.message, data: null }
+  }
+}
+
+// 获取发布任务状态
+export async function getPublishStatus(taskId: string): Promise<{
+  code: number
+  msg: string | null
+  data: {
+    task_id: string
+    status: 'pending' | 'running' | 'success' | 'failed'
+    message: string
+    created_at?: string
+    completed_at?: string
+    note_id?: string
+  } | null
+}> {
+  try {
+    const response = await axios.get(`${API_BASE_URL}/publish/xhs/status/${taskId}`)
+    return response.data
+  } catch (error: any) {
+    return { code: 500, msg: error.message, data: null }
+  }
+}
+

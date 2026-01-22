@@ -7,6 +7,27 @@
         <h1 class="page-title">我的创作</h1>
       </div>
       <div style="display: flex; gap: 10px;">
+        <!-- 批量发布按钮 -->
+        <button
+          v-if="!isSelectMode"
+          class="btn"
+          @click="enterSelectMode"
+          style="border: 1px solid var(--border-color);"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+          批量发布
+        </button>
+        <!-- 选择模式操作栏 -->
+        <template v-else>
+          <span class="select-count">已选 {{ selectedRecords.size }} 项</span>
+          <button class="btn btn-primary" @click="openPublishModal" :disabled="selectedRecords.size === 0">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M22 2L11 13"></path><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            发布 ({{ selectedRecords.size }})
+          </button>
+          <button class="btn" @click="exitSelectMode" style="border: 1px solid var(--border-color);">
+            取消
+          </button>
+        </template>
         <button
           class="btn"
           @click="handleScanAll"
@@ -82,9 +103,12 @@
         v-for="record in records"
         :key="record.id"
         :record="record"
+        :selectable="isSelectMode"
+        :selected="selectedRecords.has(record.id)"
         @preview="viewImages"
         @edit="loadRecord"
         @delete="confirmDelete"
+        @select="toggleSelect"
       />
     </div>
 
@@ -115,6 +139,47 @@
       @close="showOutlineModal = false"
     />
 
+    <!-- 发布弹窗 -->
+    <div v-if="showPublishModal" class="modal-overlay" @click="showPublishModal = false">
+      <div class="publish-modal" @click.stop>
+        <h3>发布到小红书</h3>
+        <p class="modal-desc">将 {{ selectedRecords.size }} 条笔记发布到小红书</p>
+        
+        <div class="form-group">
+          <label>选择账号</label>
+          <select v-model="selectedAccountId" class="account-select">
+            <option value="" disabled>请选择账号</option>
+            <option 
+              v-for="account in xhsAccounts" 
+              :key="account.id" 
+              :value="account.id"
+              :disabled="account.status === 0"
+            >
+              {{ account.userName }} {{ account.status === 0 ? '(已失效)' : '' }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="publishStatus" class="publish-status" :class="publishStatus.type">
+          {{ publishStatus.message }}
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" @click="showPublishModal = false" :disabled="isPublishing">
+            取消
+          </button>
+          <button 
+            class="btn btn-primary" 
+            @click="handlePublish"
+            :disabled="!selectedAccountId || isPublishing"
+          >
+            <div v-if="isPublishing" class="spinner-small" style="margin-right: 6px;"></div>
+            {{ isPublishing ? '发布中...' : '确认发布' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
   </div>
 </template>
 
@@ -130,7 +195,11 @@ import {
   type HistoryRecord,
   regenerateImage as apiRegenerateImage,
   updateHistory,
-  scanAllTasks
+  scanAllTasks,
+  getAccounts,
+  publishToXhs,
+  getPublishStatus,
+  type Account
 } from '../api'
 import { useGeneratorStore } from '../stores/generator'
 
@@ -159,6 +228,15 @@ const viewingRecord = ref<any>(null)
 const regeneratingImages = ref<Set<number>>(new Set())
 const showOutlineModal = ref(false)
 const isScanning = ref(false)
+
+// 批量发布状态
+const isSelectMode = ref(false)
+const selectedRecords = ref<Set<string>>(new Set())
+const showPublishModal = ref(false)
+const xhsAccounts = ref<Account[]>([])
+const selectedAccountId = ref<number | ''>('')
+const isPublishing = ref(false)
+const publishStatus = ref<{ type: 'info' | 'success' | 'error', message: string } | null>(null)
 
 /**
  * 加载历史记录列表
@@ -357,6 +435,147 @@ function downloadAllImages() {
 }
 
 /**
+ * 进入选择模式
+ */
+function enterSelectMode() {
+  isSelectMode.value = true
+  selectedRecords.value = new Set()
+}
+
+/**
+ * 退出选择模式
+ */
+function exitSelectMode() {
+  isSelectMode.value = false
+  selectedRecords.value = new Set()
+}
+
+/**
+ * 切换选中状态
+ */
+function toggleSelect(recordId: string) {
+  const newSet = new Set(selectedRecords.value)
+  if (newSet.has(recordId)) {
+    newSet.delete(recordId)
+  } else {
+    newSet.add(recordId)
+  }
+  selectedRecords.value = newSet
+}
+
+/**
+ * 打开发布弹窗
+ */
+async function openPublishModal() {
+  showPublishModal.value = true
+  publishStatus.value = null
+  
+  // 加载小红书账号列表
+  const res = await getAccounts()
+  if (res.code === 200) {
+    // 过滤出小红书账号 (type = 1)
+    xhsAccounts.value = res.data.filter((acc: any) => acc[1] === 1).map((acc: any) => ({
+      id: acc[0],
+      type: acc[1],
+      filePath: acc[2],
+      userName: acc[3],
+      status: acc[4]
+    }))
+  }
+}
+
+/**
+ * 执行发布
+ */
+async function handlePublish() {
+  if (!selectedAccountId.value) return
+  
+  isPublishing.value = true
+  publishStatus.value = { type: 'info', message: '正在准备发布...' }
+  
+  let successCount = 0
+  let failCount = 0
+  
+  for (const recordId of selectedRecords.value) {
+    const recordRes = await getHistory(recordId)
+    if (!recordRes.success || !recordRes.record) {
+      failCount++
+      continue
+    }
+    
+    const record = recordRes.record
+    
+    // 获取图片路径
+    const imagePaths = record.images.generated
+      .filter((img: string) => img)
+      .map((img: string) => `history/${record.images.task_id}/${img}`)
+    
+    if (imagePaths.length === 0) {
+      failCount++
+      continue
+    }
+    
+    // 获取内容
+    const content = record.outline.pages
+      .map((p: any) => p.content)
+      .join('\n\n')
+    
+    publishStatus.value = { type: 'info', message: `正在发布: ${record.title.slice(0, 20)}...` }
+    
+    const publishRes = await publishToXhs({
+      account_id: selectedAccountId.value as number,
+      title: record.title.slice(0, 20),
+      content: content.slice(0, 1000),
+      image_paths: imagePaths,
+      tags: []
+    })
+    
+    if (publishRes.code === 200 && publishRes.data?.task_id) {
+      // 轮询等待发布完成
+      const taskId = publishRes.data.task_id
+      let attempts = 0
+      const maxAttempts = 60 // 最多等待60秒
+      
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 1000))
+        const statusRes = await getPublishStatus(taskId)
+        
+        if (statusRes.data?.status === 'success') {
+          successCount++
+          break
+        } else if (statusRes.data?.status === 'failed') {
+          failCount++
+          break
+        }
+        attempts++
+      }
+      
+      if (attempts >= maxAttempts) {
+        failCount++
+      }
+    } else {
+      failCount++
+    }
+  }
+  
+  isPublishing.value = false
+  
+  if (successCount > 0 && failCount === 0) {
+    publishStatus.value = { type: 'success', message: `发布完成！成功 ${successCount} 条` }
+  } else if (successCount > 0) {
+    publishStatus.value = { type: 'info', message: `发布完成：成功 ${successCount} 条，失败 ${failCount} 条` }
+  } else {
+    publishStatus.value = { type: 'error', message: `发布失败：${failCount} 条` }
+  }
+  
+  // 3秒后关闭弹窗
+  setTimeout(() => {
+    showPublishModal.value = false
+    exitSelectMode()
+  }, 3000)
+}
+
+/**
  * 扫描所有任务并同步
  */
 async function handleScanAll() {
@@ -512,5 +731,99 @@ onMounted(async () => {
 .empty-state-large .empty-tips {
   margin-top: 10px;
   color: var(--text-placeholder);
+}
+
+/* Selection Mode */
+.select-count {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  font-size: 14px;
+  color: var(--primary, #ff2442);
+  font-weight: 500;
+}
+
+/* Publish Modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.publish-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.publish-modal h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.modal-desc {
+  margin: 0 0 20px 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.form-group {
+  margin-bottom: 16px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.account-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+}
+
+.account-select:focus {
+  outline: none;
+  border-color: var(--primary, #ff2442);
+}
+
+.publish-status {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.publish-status.info {
+  background: #e8f4fd;
+  color: #1677ff;
+}
+
+.publish-status.success {
+  background: #f0fff4;
+  color: #52c41a;
+}
+
+.publish-status.error {
+  background: #fff0f0;
+  color: #ff4d4f;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
 }
 </style>
