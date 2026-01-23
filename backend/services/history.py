@@ -301,6 +301,8 @@ class HistoryService:
         Returns:
             bool: 删除是否成功，记录不存在时返回 False
         """
+        import shutil
+        
         record = self.get_record(record_id)
         if not record:
             return False
@@ -311,16 +313,15 @@ class HistoryService:
             task_dir = os.path.join(self.history_dir, task_id)
             if os.path.exists(task_dir) and os.path.isdir(task_dir):
                 try:
-                    import shutil
                     shutil.rmtree(task_dir)
-                    print(f"已删除任务目录: {task_dir}")
-                except Exception as e:
-                    print(f"删除任务目录失败: {task_dir}, {e}")
+                except Exception:
+                    pass
 
         # 删除记录 JSON 文件
         record_path = self._get_record_path(record_id)
         try:
-            os.remove(record_path)
+            if os.path.exists(record_path):
+                os.remove(record_path)
         except Exception:
             return False
 

@@ -109,6 +109,7 @@
         @edit="loadRecord"
         @delete="confirmDelete"
         @select="toggleSelect"
+        @publish="openSinglePublishModal"
       />
     </div>
 
@@ -143,7 +144,9 @@
     <div v-if="showPublishModal" class="modal-overlay" @click="showPublishModal = false">
       <div class="publish-modal" @click.stop>
         <h3>发布到小红书</h3>
-        <p class="modal-desc">将 {{ selectedRecords.size }} 条笔记发布到小红书</p>
+        <p class="modal-desc">
+          {{ singlePublishRecord ? `将「${singlePublishRecord.title.slice(0, 20)}」发布到小红书` : `将 ${selectedRecords.size} 条笔记发布到小红书` }}
+        </p>
         
         <div class="form-group">
           <label>选择账号</label>
@@ -199,6 +202,7 @@ import {
   getAccounts,
   publishToXhs,
   getPublishStatus,
+  generatePublishContent,
   type Account
 } from '../api'
 import { useGeneratorStore } from '../stores/generator'
@@ -234,9 +238,12 @@ const isSelectMode = ref(false)
 const selectedRecords = ref<Set<string>>(new Set())
 const showPublishModal = ref(false)
 const xhsAccounts = ref<Account[]>([])
-const selectedAccountId = ref<number | ''>('')
+const selectedAccountId = ref<number | ''>()
 const isPublishing = ref(false)
 const publishStatus = ref<{ type: 'info' | 'success' | 'error', message: string } | null>(null)
+
+// 单条发布状态
+const singlePublishRecord = ref<any>(null)
 
 /**
  * 加载历史记录列表
@@ -464,9 +471,10 @@ function toggleSelect(recordId: string) {
 }
 
 /**
- * 打开发布弹窗
+ * 打开发布弹窗（批量发布）
  */
 async function openPublishModal() {
+  singlePublishRecord.value = null  // 清空单条发布记录
   showPublishModal.value = true
   publishStatus.value = null
   
@@ -485,7 +493,28 @@ async function openPublishModal() {
 }
 
 /**
- * 执行发布
+ * 打开单条发布弹窗
+ */
+async function openSinglePublishModal(record: any) {
+  singlePublishRecord.value = record  // 保存要发布的记录
+  showPublishModal.value = true
+  publishStatus.value = null
+  
+  // 加载小红书账号列表
+  const res = await getAccounts()
+  if (res.code === 200) {
+    xhsAccounts.value = res.data.filter((acc: any) => acc[1] === 1).map((acc: any) => ({
+      id: acc[0],
+      type: acc[1],
+      filePath: acc[2],
+      userName: acc[3],
+      status: acc[4]
+    }))
+  }
+}
+
+/**
+ * 执行发布（支持单条和批量发布）
  */
 async function handlePublish() {
   if (!selectedAccountId.value) return
@@ -496,7 +525,17 @@ async function handlePublish() {
   let successCount = 0
   let failCount = 0
   
-  for (const recordId of selectedRecords.value) {
+  // 确定要发布的记录列表
+  let recordsToPublish: string[] = []
+  if (singlePublishRecord.value) {
+    // 单条发布模式
+    recordsToPublish = [singlePublishRecord.value.id]
+  } else {
+    // 批量发布模式
+    recordsToPublish = Array.from(selectedRecords.value)
+  }
+  
+  for (const recordId of recordsToPublish) {
     const recordRes = await getHistory(recordId)
     if (!recordRes.success || !recordRes.record) {
       failCount++
@@ -515,10 +554,28 @@ async function handlePublish() {
       continue
     }
     
-    // 获取内容
-    const content = record.outline.pages
-      .map((p: any) => p.content)
-      .join('\n\n')
+    // 获取发布内容：优先使用 AI 生成的发布内容
+    let content = ''
+    publishStatus.value = { type: 'info', message: `正在为「${record.title.slice(0, 15)}...」生成发布内容...` }
+    
+    // 检查是否已有存储的发布内容，如果没有则调用 AI 生成
+    if (record.outline.publish_content) {
+      content = record.outline.publish_content
+    } else {
+      // 调用 AI 根据大纲生成发布内容
+      const publishContentRes = await generatePublishContent(record.outline.raw)
+      if (publishContentRes.success && publishContentRes.publish_content) {
+        content = publishContentRes.publish_content
+      } else {
+        // 失败时回退到简单提取大纲内容
+        content = record.outline.pages
+          .map((p: any) => p.content)
+          .filter((c: string) => !c.includes('配图建议'))
+          .join('\n\n')
+          .replace(/\[(封面|内容|总结)\]/g, '')
+          .trim()
+      }
+    }
     
     publishStatus.value = { type: 'info', message: `正在发布: ${record.title.slice(0, 20)}...` }
     
@@ -571,7 +628,10 @@ async function handlePublish() {
   // 3秒后关闭弹窗
   setTimeout(() => {
     showPublishModal.value = false
-    exitSelectMode()
+    singlePublishRecord.value = null  // 清空单条发布记录
+    if (!singlePublishRecord.value) {
+      exitSelectMode()
+    }
   }, 3000)
 }
 

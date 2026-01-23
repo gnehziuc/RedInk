@@ -195,6 +195,7 @@ export interface HistoryDetail {
   outline: {
     raw: string
     pages: Page[]
+    publish_content?: string  // AI 生成的发布内容
   }
   images: {
     task_id: string | null
@@ -794,6 +795,42 @@ export async function generateContent(
     outline
   })
   return response.data
+}
+
+/**
+ * 根据大纲生成发布内容
+ *
+ * 使用 AI 根据大纲生成适合小红书发布的正文内容
+ *
+ * @param outline - 大纲原始文本
+ *
+ * @returns Promise 包含生成的发布内容
+ */
+export async function generatePublishContent(outline: string): Promise<{
+  success: boolean
+  publish_content?: string
+  error?: string
+}> {
+  try {
+    const response = await axios.post(`${API_BASE_URL}/outline/publish-content`, {
+      outline
+    }, {
+      timeout: 60000 // 60秒超时，AI生成可能需要较长时间
+    })
+    return response.data
+  } catch (error: any) {
+    if (axios.isAxiosError(error)) {
+      if (error.code === 'ECONNABORTED') {
+        return { success: false, error: '请求超时，请稍后重试' }
+      }
+      if (!error.response) {
+        return { success: false, error: '网络连接失败，请检查网络设置' }
+      }
+      const errorMessage = error.response?.data?.error || error.message || '生成发布内容失败'
+      return { success: false, error: errorMessage }
+    }
+    return { success: false, error: '未知错误，请稍后重试' }
+  }
 }
 
 // ==================== MCP 配置 API ====================

@@ -29,6 +29,13 @@
         <button class="overlay-btn primary" @click.stop="$emit('edit', record.id)">
           编辑
         </button>
+        <button 
+          v-if="record.status === 'completed'" 
+          class="overlay-btn publish" 
+          @click.stop="$emit('publish', record)"
+        >
+          发布
+        </button>
       </div>
 
       <!-- 状态标识 -->
@@ -92,6 +99,7 @@ const emit = defineEmits<{
   (e: 'edit', id: string): void
   (e: 'delete', record: Record): void
   (e: 'select', id: string): void
+  (e: 'publish', record: Record): void
 }>()
 
 /**
@@ -226,6 +234,16 @@ const formattedDate = computed(() => {
 
 .overlay-btn.primary:hover {
   background: var(--primary-hover, #e61e3a);
+  color: white;
+}
+
+.overlay-btn.publish {
+  background: rgba(24, 144, 255, 0.9);
+  border-color: rgba(24, 144, 255, 0.9);
+}
+
+.overlay-btn.publish:hover {
+  background: rgba(22, 119, 255, 1);
   color: white;
 }
 

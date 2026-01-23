@@ -76,6 +76,49 @@ def create_outline_blueprint():
                 "error": f"大纲生成异常。\n错误详情: {error_msg}\n建议：检查后端日志获取更多信息"
             }), 500
 
+    @outline_bp.route('/outline/publish-content', methods=['POST'])
+    def generate_publish_content():
+        """
+        根据大纲生成发布内容
+
+        请求格式（JSON）：
+        - outline: 大纲原始文本
+
+        返回：
+        - success: 是否成功
+        - publish_content: 生成的发布内容
+        """
+        start_time = time.time()
+
+        try:
+            data = request.get_json()
+            outline = data.get('outline', '')
+
+            if not outline:
+                return jsonify({
+                    "success": False,
+                    "error": "参数错误：outline 不能为空"
+                }), 400
+
+            logger.info("🔄 开始生成发布内容...")
+            outline_service = get_outline_service()
+            result = outline_service.generate_publish_content(outline)
+
+            elapsed = time.time() - start_time
+            if result["success"]:
+                logger.info(f"✅ 发布内容生成成功，耗时 {elapsed:.2f}s")
+                return jsonify(result), 200
+            else:
+                logger.error(f"❌ 发布内容生成失败: {result.get('error')}")
+                return jsonify(result), 500
+
+        except Exception as e:
+            log_error('/outline/publish-content', e)
+            return jsonify({
+                "success": False,
+                "error": f"发布内容生成异常: {str(e)}"
+            }), 500
+
     return outline_bp
 
 

@@ -16,6 +16,7 @@ class OutlineService:
         self.text_config = self._load_text_config()
         self.client = self._get_client()
         self.prompt_template = self._load_prompt_template()
+        self.publish_content_prompt_template = self._load_publish_content_prompt_template()
         logger.info(f"OutlineService 初始化完成，使用服务商: {self.text_config.get('active_provider')}")
 
     def _load_text_config(self) -> dict:
@@ -94,6 +95,71 @@ class OutlineService:
         )
         with open(prompt_path, "r", encoding="utf-8") as f:
             return f.read()
+
+    def _load_publish_content_prompt_template(self) -> str:
+        """加载发布内容生成提示词模板"""
+        prompt_path = os.path.join(
+            os.path.dirname(os.path.dirname(__file__)),
+            "prompts",
+            "publish_content_prompt.txt"
+        )
+        if os.path.exists(prompt_path):
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                return f.read()
+        # 默认提示词
+        return """根据以下大纲生成适合小红书发布的正文内容（800字以内）：
+{outline}
+
+要求：无类型标记、无配图建议、保持小红书风格、可适当使用emoji。直接输出正文："""
+
+    def generate_publish_content(self, outline_text: str) -> Dict[str, Any]:
+        """
+        根据大纲生成适合发布的正文内容
+
+        Args:
+            outline_text: 大纲原始文本
+
+        Returns:
+            Dict: 包含 success 和 publish_content 字段
+        """
+        try:
+            logger.info("开始生成发布内容...")
+            prompt = self.publish_content_prompt_template.format(outline=outline_text)
+
+            # 从配置中获取模型参数
+            active_provider = self.text_config.get('active_provider', 'google_gemini')
+            providers = self.text_config.get('providers', {})
+            provider_config = providers.get(active_provider, {})
+
+            model = provider_config.get('model', 'gemini-2.0-flash-exp')
+            temperature = provider_config.get('temperature', 0.8)  # 稍低温度，输出更稳定
+            max_output_tokens = provider_config.get('max_output_tokens', 2000)
+
+            logger.info(f"调用 AI 生成发布内容: model={model}")
+            publish_content = self.client.generate_text(
+                prompt=prompt,
+                model=model,
+                temperature=temperature,
+                max_output_tokens=max_output_tokens
+            )
+
+            # 清理内容：去除可能的引导语
+            publish_content = publish_content.strip()
+            logger.info(f"发布内容生成完成，长度: {len(publish_content)} 字符")
+
+            return {
+                "success": True,
+                "publish_content": publish_content
+            }
+
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f"发布内容生成失败: {error_msg}")
+            return {
+                "success": False,
+                "error": f"发布内容生成失败: {error_msg}"
+            }
+
 
     def _parse_outline(self, outline_text: str) -> List[Dict[str, Any]]:
         # 按 <page> 分割页面（兼容旧的 --- 分隔符）
